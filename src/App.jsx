@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Mic, MicOff, Settings, X, Minus, Square as Maximize, Power, Mail, Target, Send,
     Activity, CloudSun, MapPin, MonitorSmartphone, Check, Loader2, Ban, Sparkles, Eye, Crosshair, FolderOpen,
-    Cpu, Clock, Hammer, MailCheck, CalendarDays, BookOpen,
+    Cpu, Clock, Hammer, MailCheck, CalendarDays, BookOpen, ThumbsUp, ThumbsDown, Database,
 } from 'lucide-react';
 
 import Orb3D from './components/Orb3D';
@@ -121,6 +121,9 @@ function App() {
     const [ragError, setRagError] = useState(null);
     const [rightTab, setRightTab] = useState('log');
     const [memories, setMemories] = useState([]);
+    const [feedbackStats, setFeedbackStats] = useState({ total: 0, positive: 0, negative: 0, ratio: 0 });
+    const [feedbackList, setFeedbackList] = useState([]);
+    const [datasets, setDatasets] = useState([]);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -223,6 +226,9 @@ function App() {
         socket.on('memory_deleted', (d) => { if (d.ok) setMemories(prev => prev.filter(m => m.id !== d.id)); });
         socket.on('documents_list', (d) => setDocuments(d.documents || []));
         socket.on('rag_error', (d) => setRagError(d.error));
+        socket.on('feedback_stats', setFeedbackStats);
+        socket.on('feedback_list', (d) => setFeedbackList(d.feedback || []));
+        socket.on('datasets_list', (d) => setDatasets(d.datasets || []));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -257,7 +263,8 @@ function App() {
             clearInterval(t);
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
                 'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
-                'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error'].forEach((e) => socket.off(e));
+                'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error',
+                'feedback_stats', 'feedback_list', 'datasets_list'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -477,8 +484,8 @@ function App() {
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'memory') socket.emit('get_memories'); }}
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database]].map(([k, l, I]) => (
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -537,6 +544,94 @@ function App() {
                                             </div>
                                         ))
                                     )}
+                                </div>
+                            ) : rightTab === 'train' ? (
+                                <div className="space-y-4">
+                                    {/* Dataset Upload */}
+                                    <div>
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500 mb-2">DATASET UPLOAD</div>
+                                        <label className="flex items-center justify-center gap-2 w-full py-5 rounded-xl border-2 border-dashed border-white/10 hover:border-fuchsia-300/30 cursor-pointer transition-colors text-slate-400 hover:text-fuchsia-300 text-xs">
+                                            <Database size={14} />
+                                            <span>Upload JSON / JSONL / CSV / TXT</span>
+                                            <input type="file" accept=".json,.jsonl,.csv,.txt" className="hidden" onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    const b64 = btoa(String.fromCharCode(...new Uint8Array(ev.target.result)));
+                                                    socket.emit('upload_dataset', { name: file.name, format: file.name.split('.').pop()?.toLowerCase() || 'txt', content: b64 });
+                                                };
+                                                reader.readAsArrayBuffer(file);
+                                                e.target.value = '';
+                                            }} />
+                                        </label>
+                                        {datasets.length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {datasets.map((ds, i) => (
+                                                    <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                        <div>
+                                                            <div className="text-[11px] text-slate-200 truncate max-w-[180px]">{ds.name}</div>
+                                                            <div className="text-[9px] text-slate-500">{ds.record_count} records · {ds.format?.toUpperCase()}</div>
+                                                        </div>
+                                                        <span className="text-[9px] text-emerald-400">indexed</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Feedback */}
+                                    <div>
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500 mb-2">AI RESPONSE FEEDBACK</div>
+                                        <div className="flex gap-2 mb-2">
+                                            <div className="flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-center">
+                                                <div className="text-lg text-emerald-400 font-mono">{feedbackStats.positive}</div>
+                                                <div className="text-[9px] text-slate-500">POSITIVE</div>
+                                            </div>
+                                            <div className="flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-center">
+                                                <div className="text-lg text-rose-400 font-mono">{feedbackStats.negative}</div>
+                                                <div className="text-[9px] text-slate-500">NEGATIVE</div>
+                                            </div>
+                                            <div className="flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-center">
+                                                <div className="text-lg text-cyan-400 font-mono">{feedbackStats.total}</div>
+                                                <div className="text-[9px] text-slate-500">TOTAL</div>
+                                            </div>
+                                        </div>
+                                        {/* Rate last response */}
+                                        {messages.filter(m => m.sender === 'ADA').length > 0 && (() => {
+                                            const lastAI = [...messages].reverse().find(m => m.sender === 'ADA');
+                                            const lastUser = [...messages].reverse().find(m => m.sender === 'User');
+                                            return (
+                                                <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                                                    <div className="text-[9px] text-slate-500 mb-1">LAST RESPONSE</div>
+                                                    <div className="text-[11px] text-slate-300 line-clamp-2 mb-2">{lastAI?.text?.slice(0, 120)}</div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => { socket.emit('submit_feedback', { user_message: lastUser?.text || '', ai_response: lastAI?.text || '', rating: 1 }); }}
+                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-emerald-300/20 text-emerald-300 hover:bg-emerald-400/10 text-xs transition-colors"
+                                                        ><ThumbsUp size={11} /> Good</button>
+                                                        <button
+                                                            onClick={() => { socket.emit('submit_feedback', { user_message: lastUser?.text || '', ai_response: lastAI?.text || '', rating: -1 }); }}
+                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-300/20 text-rose-300 hover:bg-rose-400/10 text-xs transition-colors"
+                                                        ><ThumbsDown size={11} /> Bad</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                    {/* Knowledge Base Status */}
+                                    <div>
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500 mb-2">KNOWLEDGE BASE STATUS</div>
+                                        <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                                            <div className="text-xs text-slate-300">{documents.length} documents indexed</div>
+                                            <div className="text-[9px] text-slate-500 mt-0.5">
+                                                {documents.reduce((acc, d) => acc + (d.chunk_count || 0), 0)} total chunks
+                                            </div>
+                                            <button
+                                                onClick={() => { setShowKnowledge(true); socket.emit('list_documents'); }}
+                                                className="mt-2 text-[10px] text-cyan-400 hover:text-cyan-200 tracking-wider"
+                                            >OPEN KNOWLEDGE BASE →</button>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="space-y-5">

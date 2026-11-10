@@ -214,6 +214,14 @@ except Exception as _wake_err:
     wake_listener = None
     _WAKE_AVAILABLE = False
 
+try:
+    from training_centre import tc as training_centre
+    _TC_AVAILABLE = True
+except Exception as _tc_err:
+    print(f"[TC] Training centre unavailable: {_tc_err}")
+    training_centre = None
+    _TC_AVAILABLE = False
+
 
 def _on_wake_word():
     """Called by wake word listener thread → emit socket event to all clients."""
@@ -865,6 +873,75 @@ async def delete_document(sid, data=None):
         ok = await asyncio.to_thread(rag_engine.delete_document, filename)
         docs = await asyncio.to_thread(rag_engine.list_documents)
         await sio.emit('documents_list', {'documents': docs}, room=sid)
+
+@sio.event
+async def submit_feedback(sid, data=None):
+    if not training_centre:
+        return
+    data = data or {}
+    result = await asyncio.to_thread(
+        training_centre.submit_feedback,
+        data.get('user_message', ''),
+        data.get('ai_response', ''),
+        data.get('rating', 1),
+        data.get('note', '')
+    )
+    stats = await asyncio.to_thread(training_centre.get_feedback_stats)
+    await sio.emit('feedback_stats', stats, room=sid)
+
+@sio.event
+async def get_feedback_stats(sid, data=None):
+    if not training_centre:
+        await sio.emit('feedback_stats', {'total': 0, 'positive': 0, 'negative': 0, 'ratio': 0}, room=sid)
+        return
+    stats = await asyncio.to_thread(training_centre.get_feedback_stats)
+    fb = await asyncio.to_thread(training_centre.get_feedback, 10)
+    await sio.emit('feedback_stats', stats, room=sid)
+    await sio.emit('feedback_list', {'feedback': fb}, room=sid)
+
+@sio.event
+async def upload_dataset(sid, data=None):
+    if not training_centre:
+        return
+    data = data or {}
+    import base64
+    name = data.get('name', 'dataset')
+    fmt = data.get('format', 'json')
+    b64 = data.get('content', '')
+    try:
+        content_bytes = base64.b64decode(b64) if b64 else b''
+    except Exception:
+        content_bytes = b''
+    size = len(content_bytes)
+    record_count = 0
+    if fmt in ('json', 'jsonl') and content_bytes:
+        try:
+            import json as _json
+            text = content_bytes.decode('utf-8', errors='replace')
+            if fmt == 'jsonl':
+                record_count = len([l for l in text.splitlines() if l.strip()])
+            else:
+                obj = _json.loads(text)
+                record_count = len(obj) if isinstance(obj, list) else 1
+        except Exception:
+            pass
+    elif fmt == 'csv' and content_bytes:
+        try:
+            text = content_bytes.decode('utf-8', errors='replace')
+            record_count = max(0, len(text.splitlines()) - 1)
+        except Exception:
+            pass
+    result = await asyncio.to_thread(training_centre.upload_dataset, name, fmt, size, record_count)
+    datasets = await asyncio.to_thread(training_centre.list_datasets)
+    await sio.emit('datasets_list', {'datasets': datasets}, room=sid)
+
+@sio.event
+async def list_datasets(sid, data=None):
+    if not training_centre:
+        await sio.emit('datasets_list', {'datasets': []}, room=sid)
+        return
+    datasets = await asyncio.to_thread(training_centre.list_datasets)
+    await sio.emit('datasets_list', {'datasets': datasets}, room=sid)
 
 if __name__ == "__main__":
     uvicorn.run(
