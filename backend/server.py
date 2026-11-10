@@ -199,6 +199,14 @@ import lk_news
 from memory import memory as memory_engine
 
 try:
+    from rag_engine import rag as rag_engine
+    _RAG_AVAILABLE = True
+except Exception as _rag_err:
+    print(f"[RAG] RAG engine unavailable: {_rag_err}")
+    rag_engine = None
+    _RAG_AVAILABLE = False
+
+try:
     from wake_word import wake_listener
     _WAKE_AVAILABLE = True
 except Exception as _wake_err:
@@ -816,6 +824,47 @@ async def delete_memory(sid, data=None):
     if mid is not None:
         ok = await asyncio.to_thread(memory_engine.delete_memory, mid)
         await sio.emit('memory_deleted', {'id': mid, 'ok': ok}, room=sid)
+
+@sio.event
+async def upload_document(sid, data=None):
+    if not rag_engine:
+        await sio.emit('rag_error', {'error': 'RAG engine unavailable'}, room=sid)
+        return
+    if not data:
+        return
+    import base64
+    filename = data.get('filename', 'document.txt')
+    b64 = data.get('content', '')
+    try:
+        content_bytes = base64.b64decode(b64)
+    except Exception as e:
+        await sio.emit('rag_error', {'error': f'Invalid file data: {e}'}, room=sid)
+        return
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'txt'
+    result = await asyncio.to_thread(rag_engine.ingest_file, filename, content_bytes, ext)
+    if 'error' in result:
+        await sio.emit('rag_error', {'error': result['error']}, room=sid)
+    else:
+        docs = await asyncio.to_thread(rag_engine.list_documents)
+        await sio.emit('documents_list', {'documents': docs}, room=sid)
+
+@sio.event
+async def list_documents(sid, data=None):
+    if not rag_engine:
+        await sio.emit('documents_list', {'documents': []}, room=sid)
+        return
+    docs = await asyncio.to_thread(rag_engine.list_documents)
+    await sio.emit('documents_list', {'documents': docs}, room=sid)
+
+@sio.event
+async def delete_document(sid, data=None):
+    if not rag_engine:
+        return
+    filename = (data or {}).get('filename')
+    if filename:
+        ok = await asyncio.to_thread(rag_engine.delete_document, filename)
+        docs = await asyncio.to_thread(rag_engine.list_documents)
+        await sio.emit('documents_list', {'documents': docs}, room=sid)
 
 if __name__ == "__main__":
     uvicorn.run(

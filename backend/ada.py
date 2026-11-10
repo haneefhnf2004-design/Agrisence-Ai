@@ -27,6 +27,11 @@ from proactive import ActivitySignals, ProactiveEngine, build_spoken_prompt
 from computer_bridge import call_computer_tool, ALLOWED_COMPUTER_TOOLS
 from memory import memory as memory_engine
 
+try:
+    from rag_engine import rag as rag_engine
+except Exception:
+    rag_engine = None
+
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
@@ -134,8 +139,9 @@ config = types.LiveConnectConfig(
 
 # Tools handled by AudioLoop._run_nexora_tool, and the ones among them that never need an approval click.
 NEXORA_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task",
-                "draft_replies_for_all", "send_reply_drafts", "show_nexora_window", "save_memory", "recall_memory")
-NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory")
+                "draft_replies_for_all", "send_reply_drafts", "show_nexora_window", "save_memory", "recall_memory",
+                "search_knowledge")
+NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory", "search_knowledge")
 
 pya = pyaudio.PyAudio()
 
@@ -1031,6 +1037,16 @@ class AudioLoop:
                 lines = [f"- [{r.get('category', 'fact')}] {r.get('content', '')}" for r in results]
                 return "Relevant memories:\n" + "\n".join(lines)
             return "No relevant memories found."
+
+        if name == "search_knowledge":
+            query = (args.get("query") or "").strip()
+            if rag_engine:
+                results = await asyncio.to_thread(rag_engine.search_knowledge, query, 5)
+                if results:
+                    lines = [f"- [from {r.get('filename', '?')}] {r.get('content', '')[:300]}" for r in results]
+                    return "Relevant knowledge:\n" + "\n".join(lines)
+                return "No relevant documents found in the knowledge base."
+            return "Knowledge base is not available."
 
         return f"Unknown tool {name}."
 

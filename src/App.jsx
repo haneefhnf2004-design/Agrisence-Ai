@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Mic, MicOff, Settings, X, Minus, Square as Maximize, Power, Mail, Target, Send,
     Activity, CloudSun, MapPin, MonitorSmartphone, Check, Loader2, Ban, Sparkles, Eye, Crosshair, FolderOpen,
-    Cpu, Clock, Hammer, MailCheck, CalendarDays,
+    Cpu, Clock, Hammer, MailCheck, CalendarDays, BookOpen,
 } from 'lucide-react';
 
 import Orb3D from './components/Orb3D';
@@ -116,6 +116,9 @@ function App() {
     const [showInbox, setShowInbox] = useState(false);
     const [showCompose, setShowCompose] = useState(false);
     const [showFocus, setShowFocus] = useState(false);
+    const [showKnowledge, setShowKnowledge] = useState(false);
+    const [documents, setDocuments] = useState([]);
+    const [ragError, setRagError] = useState(null);
     const [rightTab, setRightTab] = useState('log');
     const [memories, setMemories] = useState([]);
     const [clock, setClock] = useState(new Date());
@@ -218,6 +221,8 @@ function App() {
         socket.on('focus_history', (d) => setFocusHistory(d.sessions || []));
         socket.on('memories_list', (d) => setMemories(d.memories || []));
         socket.on('memory_deleted', (d) => { if (d.ok) setMemories(prev => prev.filter(m => m.id !== d.id)); });
+        socket.on('documents_list', (d) => setDocuments(d.documents || []));
+        socket.on('rag_error', (d) => setRagError(d.error));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -252,7 +257,7 @@ function App() {
             clearInterval(t);
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
                 'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
-                'memories_list', 'memory_deleted', 'wake_word_detected'].forEach((e) => socket.off(e));
+                'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -461,6 +466,7 @@ function App() {
                             <DockButton icon={isMuted ? MicOff : Mic} label={isMuted ? 'Muted' : 'Mic'} onClick={toggleMute} active={isConnected && !isMuted} tone={isMuted ? 'rose' : 'cyan'} disabled={!isConnected || !socketConnected} />
                             <DockButton icon={Target} label="Focus" onClick={() => (focus.active ? setRightTab('focus') : setShowFocus(true))} active={focus.active} tone="emerald" disabled={!socketConnected} />
                             <DockButton icon={Mail} label="Inbox" onClick={openInbox} active={showInbox} tone="fuchsia" disabled={!socketConnected} />
+                            <DockButton icon={BookOpen} label="Knowledge" onClick={() => { setShowKnowledge(true); socket.emit('list_documents'); }} active={showKnowledge} tone="fuchsia" disabled={!socketConnected} />
                             <DockButton icon={Sparkles} label={blueyDesktop ? 'Bluey on' : 'Bluey off'} active={blueyDesktop} tone="fuchsia" disabled={!socketConnected}
                                 onClick={() => { socket.emit('bluey', { on: !blueyDesktop }); setBlueyDesktop(!blueyDesktop); }} />
                             <DockButton icon={Settings} label="Settings" onClick={() => setShowSettings(true)} active={showSettings} />
@@ -584,6 +590,62 @@ function App() {
                 {showCompose && (
                     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60">
                         <ComposeWindow socket={socket} onClose={() => setShowCompose(false)} />
+                    </div>
+                )}
+                {showKnowledge && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60" onClick={() => setShowKnowledge(false)}>
+                        <div onClick={(e) => e.stopPropagation()} className="w-[560px] max-h-[520px] flex flex-col rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/90 to-black/90 backdrop-blur-2xl shadow-2xl overflow-hidden">
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                                <span className="text-sm font-bold tracking-widest text-cyan-300">KNOWLEDGE BASE</span>
+                                <button onClick={() => setShowKnowledge(false)} className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300"><X size={18} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+                                {ragError && (
+                                    <div className="px-3 py-2 rounded-lg bg-rose-400/10 border border-rose-400/20 text-rose-300 text-xs">{ragError}</div>
+                                )}
+                                <div>
+                                    <label className="block text-[10px] tracking-[0.25em] text-slate-500 mb-2">UPLOAD DOCUMENT</label>
+                                    <label className="flex items-center justify-center gap-2 w-full py-8 rounded-xl border-2 border-dashed border-white/10 hover:border-cyan-300/30 cursor-pointer transition-colors text-slate-400 hover:text-cyan-300 text-xs">
+                                        <BookOpen size={16} />
+                                        <span>Click to upload PDF, DOCX, TXT, or MD</span>
+                                        <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setRagError(null);
+                                            const reader = new FileReader();
+                                            reader.onload = (ev) => {
+                                                const b64 = btoa(String.fromCharCode(...new Uint8Array(ev.target.result)));
+                                                socket.emit('upload_document', { filename: file.name, content: b64 });
+                                            };
+                                            reader.readAsArrayBuffer(file);
+                                            e.target.value = '';
+                                        }} />
+                                    </label>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] tracking-[0.25em] text-slate-500 mb-2">INDEXED DOCUMENTS ({documents.length})</div>
+                                    {documents.length === 0 ? (
+                                        <div className="text-xs text-slate-500">No documents indexed yet. Upload a file above.</div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {documents.map((doc, i) => (
+                                                <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                    <div>
+                                                        <div className="text-xs text-slate-200 truncate max-w-[300px]">{doc.filename}</div>
+                                                        <div className="text-[9px] text-slate-500 mt-0.5">{doc.chunk_count} chunks · {doc.file_type?.toUpperCase()}</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => socket.emit('delete_document', { filename: doc.filename })}
+                                                        className="p-1 rounded hover:bg-rose-400/20 text-rose-400/60 hover:text-rose-300 transition-colors"
+                                                        title="Remove document"
+                                                    ><X size={12} /></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

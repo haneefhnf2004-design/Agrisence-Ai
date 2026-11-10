@@ -321,6 +321,18 @@ recall_memory_tool = {
     }
 }
 
+search_knowledge_tool = {
+    "name": "search_knowledge",
+    "description": "Searches indexed documents and knowledge base for relevant information. Use when the user asks about something that might be in their uploaded documents.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "query": {"type": "STRING", "description": "What to search for in the knowledge base."}
+        },
+        "required": ["query"]
+    }
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -355,5 +367,6 @@ tools_list = [{
         show_nexora_window_tool,
         save_memory_tool,
         recall_memory_tool,
+        search_knowledge_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events
