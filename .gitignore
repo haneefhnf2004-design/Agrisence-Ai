@@ -44,3 +44,6 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+backend/daily_state.json
+
+backend/places_cache.json

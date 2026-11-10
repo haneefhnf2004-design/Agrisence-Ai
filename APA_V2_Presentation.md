@@ -1,22 +1,22 @@
-# A.P.A V2: Autonomous Personal Assistant
+# Nexora V2: Autonomous Personal Assistant
 
 **Final Year Project** | HDIT Final Project | ICST University Park
 
 *A voice-driven Windows desktop agent with a proactive interruption engine*
 
-> **Speaker notes:** Introduce yourself and the project. A.P.A stands for Autonomous Personal Assistant: a voice-driven Windows desktop assistant that reads email, speaks up when something is urgent, and can carefully control the desktop. Outline: introduction, problem, aim and objectives, existing solutions and gap, proposed solution, methodology, system design, implementation progress, findings, remaining work and conclusion.
+> **Speaker notes:** Introduce yourself and the project. Nexora is an Autonomous Personal Assistant: a voice-driven Windows desktop assistant that reads email, speaks up when something is urgent, and can carefully control the desktop. Outline: introduction, problem, aim and objectives, existing solutions and gap, proposed solution, methodology, system design, implementation progress, findings, remaining work and conclusion.
 
 ---
 
 ## Slide 2: Introduction / Background
 
-A.P.A V2 is a voice-driven Windows desktop assistant. It holds natural voice conversations, reads and sends email with AI triage, answers weather questions on a 3D globe, and decides when to speak up. It is the foundation for a longer vision: an assistant that helps busy professionals by eventually operating the PC for them.
+Nexora V2 is a voice-driven Windows desktop assistant. It holds natural voice conversations, reads and sends email with AI triage, answers weather questions on a 3D globe, and decides when to speak up. It is the foundation for a longer vision: an assistant that helps busy professionals by eventually operating the PC for them.
 
 - **Voice assistants today:** Siri, Alexa and Google normalised speech but kept it shallow: timers, search, smart home. The limit is device and cloud lock-in, not speech technology.
 - **Realtime voice agents:** Native-audio APIs with function calling let a voice model invoke local tools mid-conversation (read mail, send mail, fetch weather) and speak the result.
 - **Zero-shot email understanding:** A large model is prompted once per inbox fetch for category, priority, sentiment and draft replies. No classifier training is needed.
 
-> **Speaker notes:** Define A.P.A V2 in one sentence. Phase 1 built the foundation: voice conversation, Gmail triage with AI, weather on a 3D globe and a desktop interface. The longer vision is a proactive assistant that speaks up when something needs attention. Then give the three background points: commercial assistants are shallow and locked in, realtime voice APIs now allow tool calling mid-conversation, and large models can classify email zero-shot with no training.
+> **Speaker notes:** Define Nexora V2 in one sentence. Phase 1 built the foundation: voice conversation, Gmail triage with AI, weather on a 3D globe and a desktop interface. The longer vision is a proactive assistant that speaks up when something needs attention. Then give the three background points: commercial assistants are shallow and locked in, realtime voice APIs now allow tool calling mid-conversation, and large models can classify email zero-shot with no training.
 
 ---
 
@@ -60,11 +60,11 @@ Why existing tools fall short:
 | Siri / Alexa / Google | Yes | No (mobile, speaker) | Basic read-out | None | Routines only |
 | Hermes Agent (Nous) | Voice memos only | No (terminal, chat) | Via integrations | None | High (memory, cron) |
 | God's Eye View | Yes (scene control) | Browser globe | None | Photoreal globe | Scene director only |
-| **A.P.A V2** | Full duplex + tools | Yes (Electron HUD) | Triage, drafts, audit | Globe + staged cards | Gated interruptions |
+| **Nexora V2** | Full duplex + tools | Yes (Electron HUD) | Triage, drafts, audit | Globe + staged cards | Gated interruptions |
 
 **The research gap:** No open, locally runnable desktop assistant unifies realtime voice tool-calling, audited zero-shot email triage and visual proof in one extensible body designed to grow into proactive PC operation. The contribution is systems integration, not a new algorithm.
 
-> **Speaker notes:** Compare three kinds of existing system. Siri, Alexa and Google are voice-first but closed and PC-blind. Hermes Agent has strong autonomy but no voice or desktop face. God's Eye View has a photorealistic globe but no email workflow. State honestly that A.P.A V2 does not beat Hermes at autonomy or God's Eye at photorealism. Its contribution is the combination, which none of them offers: full-duplex voice with local tools, a persistent desktop face and an audited email workflow.
+> **Speaker notes:** Compare three kinds of existing system. Siri, Alexa and Google are voice-first but closed and PC-blind. Hermes Agent has strong autonomy but no voice or desktop face. God's Eye View has a photorealistic globe but no email workflow. State honestly that Nexora V2 does not beat Hermes at autonomy or God's Eye at photorealism. Its contribution is the combination, which none of them offers: full-duplex voice with local tools, a persistent desktop face and an audited email workflow.
 
 ---
 
@@ -77,7 +77,7 @@ Why existing tools fall short:
 - **Gemini 2.5 Flash (zero-shot):** Live API for voice, JSON API for email. No training, no custom dataset.
 - **Separation of powers:** The model proposes tool calls. Deterministic host policy decides and logs.
 
-> **Speaker notes:** Explain A.P.A V2 as five ideas: voice, email intelligence, proactive interruptions, safe desktop control, and the Gemini zero-shot engine underneath. Close on separation of powers: the model proposes a tool call but the host decides and logs. This is why actions are safe and auditable.
+> **Speaker notes:** Explain Nexora V2 as five ideas: voice, email intelligence, proactive interruptions, safe desktop control, and the Gemini zero-shot engine underneath. Close on separation of powers: the model proposes a tool call but the host decides and logs. This is why actions are safe and auditable.
 
 ---
 
@@ -180,4 +180,4 @@ Key points:
 
 **Limits, stated honestly:** Single-machine prototype. Email accuracy not yet measured. No claim of autonomy or production readiness.
 
-> **Speaker notes:** Summarise: A.P.A V2 combines voice, email intelligence and gated desktop control. Gemini is used zero-shot with no custom training. Email is analysed in one batch, cached and validated. The assistant speaks only when the score and every gate pass. Actions need confirmation and every decision is logged. State the contribution as systems integration and be honest about the limits: no autonomy, self-awareness or production readiness is claimed. End on the key principle: the model proposes; the policy decides. Then invite questions. Likely answers: two Gemini interfaces because the Live API handles native audio and tool calling while the standard API suits batched JSON email analysis; escalation is computed in code (negative sentiment AND high priority AND moderate-or-severe intensity); the interruption threshold is a score of at least 6.0 with every gate passing; host policy, not Gemini, decides whether a click is allowed. Future work: wake-word, background monitoring, browser awareness, Outlook and wider PC operation under the same safety policy.
+> **Speaker notes:** Summarise: Nexora V2 combines voice, email intelligence and gated desktop control. Gemini is used zero-shot with no custom training. Email is analysed in one batch, cached and validated. The assistant speaks only when the score and every gate pass. Actions need confirmation and every decision is logged. State the contribution as systems integration and be honest about the limits: no autonomy, self-awareness or production readiness is claimed. End on the key principle: the model proposes; the policy decides. Then invite questions. Likely answers: two Gemini interfaces because the Live API handles native audio and tool calling while the standard API suits batched JSON email analysis; escalation is computed in code (negative sentiment AND high priority AND moderate-or-severe intensity); the interruption threshold is a score of at least 6.0 with every gate passing; host policy, not Gemini, decides whether a click is allowed. Future work: wake-word, background monitoring, browser awareness, Outlook and wider PC operation under the same safety policy.

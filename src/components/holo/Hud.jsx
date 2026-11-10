@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
 /* ------------------------------------------------------------------ *
- * Film-style FUI kit for A.P.A.
+ * Film-style FUI kit for Nexora.
  * Built from the techniques screen-graphics studios use (Cantina Creative /
  * Jayse Hansen on the Iron Man HUDs, Territory Studio): layered simple shapes,
  * constant secondary motion, decoding data, depth planes and a "mode spin"
@@ -197,7 +197,7 @@ export function BootSequence({ onDone }) {
                     <OrbHud state="summoning" size={520} />
                 </motion.div>
                 <div className="absolute text-center">
-                    <div className="text-3xl tracking-[0.6em] font-bold text-cyan-100 pl-[0.6em]"><DecodeText text="A.P.A" delay={300} speed={60} /></div>
+                    <div className="text-3xl tracking-[0.6em] font-bold text-cyan-100 pl-[0.6em]"><DecodeText text="NEXORA" delay={300} speed={60} /></div>
                     <div className="text-[10px] tracking-[0.5em] text-cyan-300/60 mt-2"><DecodeText text="AUTONOMOUS PERSONAL ASSISTANT" delay={700} /></div>
                 </div>
             </div>

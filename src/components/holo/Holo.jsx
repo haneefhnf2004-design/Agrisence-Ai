@@ -15,10 +15,11 @@ export const ACCENTS = {
 
 // Panel "boots" in: frame draws, scanline sweeps, then content fades up.
 export const panelIn = {
-    initial: { opacity: 0, scaleY: 0.02, scaleX: 0.6, filter: 'blur(8px)' },
+    // tilts up out of depth like a camera crane-up on a hologram
+    initial: { opacity: 0, scaleY: 0.02, scaleX: 0.6, rotateX: 28, z: -120, filter: 'blur(8px)', transformPerspective: 1200 },
     animate: {
-        opacity: 1, scaleY: 1, scaleX: 1, filter: 'blur(0px)',
-        transition: { scaleX: { duration: 0.25 }, scaleY: { duration: 0.35, delay: 0.2, ease: [0.2, 0.9, 0.2, 1] }, opacity: { duration: 0.2 }, filter: { duration: 0.4 } },
+        opacity: 1, scaleY: 1, scaleX: 1, rotateX: 0, z: 0, filter: 'blur(0px)', transformPerspective: 1200,
+        transition: { scaleX: { duration: 0.25 }, scaleY: { duration: 0.35, delay: 0.2, ease: [0.2, 0.9, 0.2, 1] }, rotateX: { duration: 0.9, ease: [0.16, 1, 0.3, 1] }, z: { duration: 0.9, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.2 }, filter: { duration: 0.4 } },
     },
     exit: { opacity: 0, scaleY: 0.02, filter: 'blur(6px)', transition: { duration: 0.25 } },
 };

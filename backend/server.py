@@ -147,7 +147,7 @@ _caption_buf = {"text": "", "t": 0.0}
 
 
 def _bluey_forward_widget(data):
-    """Mirror A.P.A's work into Bluey's background HUD."""
+    """Mirror Nexora's work into Bluey's background HUD."""
     if not SETTINGS.get("bluey_desktop", True):
         return
     t, d = data.get("type"), data.get("data") or {}
@@ -193,10 +193,45 @@ def _bluey_focus_watch(data):
 
 focus_engine = FocusEngine(classify=make_gemini_classifier(ada.client), on_event=_focus_event)
 
+import system_monitor
+import lk_weather
+
+
+async def _system_stats_loop():
+    """Live hardware + process list to the UI every 2 s, only while a window is connected."""
+    while True:
+        if connected_clients:
+            try:
+                await sio.emit('system_stats', await asyncio.to_thread(system_monitor.snapshot))
+            except Exception as e:
+                print(f"[STATS] {e}")
+        await asyncio.sleep(1)  # Task Manager refreshes every second too
+
+
+async def _daily_briefing_loop():
+    """Once a day from 7 AM: Sri Lanka weather on screen, and spoken if voice is on."""
+    while True:
+        if connected_clients and lk_weather.daily_due():
+            res = await asyncio.to_thread(lk_weather.sri_lanka_weather)
+            if "error" not in res:
+                lk_weather.mark_daily_done()
+                await sio.emit('widget_update', {'type': 'lk_weather', 'data': res})
+                if audio_loop is not None and audio_loop.session:
+                    try:
+                        await audio_loop.session.send(input=(
+                            "System Event: daily morning briefing. Greet the user, say today's date (call get_datetime), "
+                            f"and give a 3-sentence Sri Lanka weather update from this data: {res['summary']}"), end_of_turn=True)
+                    except Exception as e:
+                        print(f"[DAILY] speak failed: {e}")
+        await asyncio.sleep(60)
+
+
 @app.on_event("startup")
 async def startup_event():
-    print("[SERVER] A.P.A Email Assistant Backend Starting...")
+    print("[SERVER] Nexora Email Assistant Backend Starting...")
     asyncio.create_task(focus_engine.run_forever())
+    asyncio.create_task(_system_stats_loop())
+    asyncio.create_task(_daily_briefing_loop())
     if SETTINGS.get("bluey_desktop", True):
         try:
             import bluey_buddy
@@ -206,7 +241,7 @@ async def startup_event():
 
 @app.get("/status")
 async def status():
-    return {"status": "running", "service": "A.P.A Email Assistant Backend"}
+    return {"status": "running", "service": "Nexora Email Assistant Backend"}
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -214,7 +249,7 @@ from fastapi.responses import JSONResponse
 
 @app.post("/bluey/ask")
 async def bluey_ask(request: Request):
-    """Bluey's text box -> A.P.A. Needs this run's secret token in a custom header,
+    """Bluey's text box -> Nexora. Needs this run's secret token in a custom header,
     so no web page (CORS preflight) and no stale Bluey can send commands."""
     if request.headers.get("x-bluey-token") != os.environ.get("APA_BLUEY_TOKEN"):
         return JSONResponse({"ok": False, "error": "Not authorised."}, status_code=403)
@@ -223,7 +258,7 @@ async def bluey_ask(request: Request):
     if not text:
         return {"ok": False, "error": "Empty command."}
     if not (audio_loop and audio_loop.session):
-        return {"ok": False, "error": "A.P.A's voice is off. Open A.P.A and press Voice on."}
+        return {"ok": False, "error": "Nexora's voice is off. Open Nexora and press Voice on."}
     await sio.emit('transcription', {"sender": "User", "text": text})
     await audio_loop.send_text(text)
     return {"ok": True}
@@ -251,7 +286,7 @@ async def connect(sid, environ):
     print(f"Client connected: {sid}")
     connected_clients.add(sid)
     await sio.emit('focus_state', focus_engine.state(), room=sid)
-    await sio.emit('status', {'msg': 'Connected to A.P.A Backend'}, room=sid)
+    await sio.emit('status', {'msg': 'Connected to Nexora Backend'}, room=sid)
 
 @sio.event
 async def disconnect(sid):
@@ -283,7 +318,7 @@ async def start_audio(sid, data=None):
             loop_task = None
         else:
             print("Audio loop already running. Re-connecting client to session.")
-            await sio.emit('status', {'msg': 'A.P.A Already Running'})
+            await sio.emit('status', {'msg': 'Nexora Already Running'})
             return
 
     def on_audio_data(data_bytes):
@@ -341,8 +376,8 @@ async def start_audio(sid, data=None):
 
         loop_task.add_done_callback(handle_loop_exit)
 
-        print("Emitting 'A.P.A Started'")
-        await sio.emit('status', {'msg': 'A.P.A Started'})
+        print("Emitting 'Nexora Started'")
+        await sio.emit('status', {'msg': 'Nexora Started'})
 
         email_config = SETTINGS.get("email_config", {})
         if email_config and audio_loop.email_agent:
@@ -368,7 +403,7 @@ async def stop_audio(sid, data=None):
             loop_task.cancel()
         audio_loop = None
         loop_task = None
-        await sio.emit('status', {'msg': 'A.P.A Stopped'})
+        await sio.emit('status', {'msg': 'Nexora Stopped'})
 
 @sio.event
 async def toggle_mute(sid, data=None):
@@ -424,7 +459,7 @@ async def send_message(sid, data):
                 await sio.emit('error', {'msg': f"Failed to send message: {e}"})
     else:
         print("[CHAT] Cannot send message: Audio loop not running or no session.")
-        await sio.emit('error', {'msg': "A.P.A is not running."})
+        await sio.emit('error', {'msg': "Nexora is not running."})
 
 @sio.event
 async def fetch_today_emails(sid, data=None):
@@ -629,7 +664,7 @@ def _bluey_quit():
 
 @sio.event
 async def computer_resume(sid, data=None):
-    """Lift the emergency stop so A.P.A may use mouse/keyboard again."""
+    """Lift the emergency stop so Nexora may use mouse/keyboard again."""
     from computer_bridge import resume_control
     resume_control()
     await sio.emit('widget_update', {'type': 'computer_control', 'data': {

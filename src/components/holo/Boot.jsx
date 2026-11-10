@@ -8,7 +8,7 @@ import { sfx } from '../../sfx';
  *   1. CRT ignition      a line of light snaps open into the screen
  *   2. Core assembly     particles converge into the orb, rings lock on
  *   3. Diagnostics       each subsystem is checked (real status for the core)
- *   4. Title             A.P.A decodes with a chromatic split, "welcome back"
+ *   4. Title             Nexora decodes with a chromatic split, "welcome back"
  *   5. Iris reveal       a ring of light opens from the orb onto the live HUD
  * Click or press any key to skip.
  * ------------------------------------------------------------------ */
@@ -191,9 +191,9 @@ export default function Boot({ coreOnline, onDone }) {
             {after('title') && (
                 <div className="absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 text-center">
                     <div className="relative text-7xl font-bold tracking-[0.5em] pl-[0.5em] text-white">
-                        <motion.span className="absolute inset-0 text-rose-400/70 mix-blend-screen" initial={{ x: -14, opacity: 0.9 }} animate={{ x: 0, opacity: 0 }} transition={{ duration: 0.8 }}>A.P.A</motion.span>
-                        <motion.span className="absolute inset-0 text-cyan-300/70 mix-blend-screen" initial={{ x: 14, opacity: 0.9 }} animate={{ x: 0, opacity: 0 }} transition={{ duration: 0.8 }}>A.P.A</motion.span>
-                        <span style={{ textShadow: '0 0 30px rgba(103,232,249,.8)' }}><DecodeText text="A.P.A" speed={45} /></span>
+                        <motion.span className="absolute inset-0 text-rose-400/70 mix-blend-screen" initial={{ x: -14, opacity: 0.9 }} animate={{ x: 0, opacity: 0 }} transition={{ duration: 0.8 }}>NEXORA</motion.span>
+                        <motion.span className="absolute inset-0 text-cyan-300/70 mix-blend-screen" initial={{ x: 14, opacity: 0.9 }} animate={{ x: 0, opacity: 0 }} transition={{ duration: 0.8 }}>NEXORA</motion.span>
+                        <span style={{ textShadow: '0 0 30px rgba(103,232,249,.8)' }}><DecodeText text="NEXORA" speed={45} /></span>
                     </div>
                     <div className="mt-4 text-[11px] tracking-[0.6em] text-cyan-200/70"><DecodeText text="AUTONOMOUS PERSONAL ASSISTANT" delay={300} speed={16} /></div>
                     <motion.div className="mt-6 text-sm tracking-[0.4em] text-white/90" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}>

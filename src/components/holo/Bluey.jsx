@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Bluey: A.P.A's googly-eyed blueberry focus buddy (in-app version).
+ * Bluey: Nexora's googly-eyed blueberry focus buddy (in-app version).
  *  mood: happy | focus | worried | sleepy
  *  say:  text for the speech bubble (null hides it)
  * Eyes follow the mouse; blinks; bounces when it has something to say.

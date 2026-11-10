@@ -1,4 +1,4 @@
-# 📽️ A.P.A V2 - Presentation Slide Deck (Blueprint)
+# 📽️ Nexora V2 - Presentation Slide Deck (Blueprint)
 
 **Theme:** Simple, Clean, High-Impact. 
 **Visual Style:** Dark mode, minimal text, strong keywords, high-quality diagrams.
@@ -6,7 +6,7 @@
 ---
 
 ## 📑 Slide 1: Title Slide
-- **Main Title:** A.P.A V2
+- **Main Title:** Nexora V2
 - **Subtitle:** Autonomous Personal Assistant
 - **Tagline:** Bridging the Gap Between LLMs and Local Machine Control.
 - **Footer:** [Your Names] | Phase 1: Architecture & Research
@@ -68,6 +68,6 @@
 ---
 
 ## 🏁 Slide 8: Q&A / Conclusion
-- **Main Point:** A.P.A V2 is not just a bot; it's a digital operator.
+- **Main Point:** Nexora V2 is not just a bot; it's a digital operator.
 - **Call to Action:** "Ready for Questions."
 - **Keywords:** `Multi-modal`, `Autonomous`, `Efficient`.

@@ -207,7 +207,7 @@ class FocusEngine:
 
     def __init__(self, classify=None, capture=capture_screen_jpeg, app_info=foreground_app,
                  is_locked=screen_locked, on_event=None, clock=time.time,
-                 history_file=HISTORY_FILE, own_window_titles=("A.P.A V2",)):
+                 history_file=HISTORY_FILE, own_window_titles=("Nexora V2",)):
         self.classify = classify
         self.capture = capture
         self.app_info = app_info

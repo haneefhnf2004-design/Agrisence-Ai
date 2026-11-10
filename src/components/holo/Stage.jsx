@@ -89,6 +89,39 @@ function WeatherCard({ d }) {
     );
 }
 
+/* ------------------------------------------------- SRI LANKA WX ---- */
+// All 25 districts: globe with a pin each, plus a sortable-at-a-glance table.
+function LkWeatherSummon({ widget, onClose }) {
+    const d = widget.data || {};
+    const rows = d.districts || [];
+    return (
+        <FlyRow>
+            <HoloPanel code="WX-LK" accent="violet" icon={CloudSun} title="Sri Lanka · all districts" subtitle={`Updated ${d.updated || ''}`}
+                onClose={onClose} bodyClass="p-0">
+                <div className="relative flex items-center justify-center" style={{ width: 460, height: 420 }}>
+                    <GlobeStage mode="weather" data={{ city: 'Sri Lanka', markers: d.markers || [] }} width={450} height={410} />
+                </div>
+            </HoloPanel>
+            <HoloPanel code="25 DIST" accent="cyan" icon={CloudSun} title="District report" subtitle={d.summary} className="w-[360px]">
+                <div className="max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
+                    <div className="flex text-[9px] tracking-[0.2em] text-slate-500 border-b border-white/5 pb-1 mb-1">
+                        <span className="flex-1">DISTRICT</span><span className="w-10 text-right">NOW</span><span className="w-16 text-right">HI/LO</span><span className="w-12 text-right">RAIN</span>
+                    </div>
+                    {rows.map((r, i) => (
+                        <motion.div key={r.district} {...stagger(i, 0.4)} className="flex items-center text-[11px] font-mono py-1 border-b border-white/[0.04]">
+                            <span className="flex-1 truncate"><span className="text-slate-200">{r.district}</span> <span className="text-slate-500 capitalize">· {r.description}</span></span>
+                            <span className="w-10 text-right text-cyan-200">{r.temp}°</span>
+                            <span className="w-16 text-right text-slate-400">{r.hi}/{r.lo}°</span>
+                            <span className={`w-12 text-right ${(r.rain_chance ?? 0) >= 60 ? 'text-sky-300' : 'text-slate-500'}`}>{r.rain_chance ?? '--'}%</span>
+                        </motion.div>
+                    ))}
+                </div>
+                <div className="mt-3 text-[9px] font-mono text-slate-500">SOURCE · OPEN-METEO · DAILY 7 AM BRIEFING</div>
+            </HoloPanel>
+        </FlyRow>
+    );
+}
+
 /* -------------------------------------------------------- GOD'S EYE ---- */
 const LAYER = {
     flights: { title: 'Airspace surveillance', code: 'GE-AIR', icon: Plane, accent: 'amber' },
@@ -238,8 +271,8 @@ function EmailViewSummon({ widget, onClose, onAsk }) {
                     {d.body?.trim() || 'This email has no text.'}
                 </div>
                 <div className="flex gap-2 px-5 py-3 border-t border-white/5">
-                    <button onClick={() => onAsk(`Draft a reply to the email from ${sender} about "${d.subject || ''}".`)} className="holo-btn"><Reply size={14} /> Draft a reply</button>
-                    {imgs.length > 0 && <span className="text-[10px] text-slate-500 self-center font-mono">{imgs.length} IMAGE{imgs.length > 1 ? 'S' : ''} · SEEN BY A.P.A.</span>}
+                    <button onClick={() => onAsk(`Draft a reply to the email from ${sender} about "${d.subject || ''}" and read it to me. When I agree, send it with reply_to_email so it stays in the same thread.`)} className="holo-btn"><Reply size={14} /> Draft a reply</button>
+                    {imgs.length > 0 && <span className="text-[10px] text-slate-500 self-center font-mono">{imgs.length} IMAGE{imgs.length > 1 ? 'S' : ''} · SEEN BY NEXORA</span>}
                 </div>
             </HoloPanel>
             {imgs.length > 0 && (
@@ -264,7 +297,7 @@ function ComputerSummon({ steps, shot, onClose, onStop, onResume }) {
     return (
         <FlyRow>
             <HoloPanel code="OPS-09" accent="amber" icon={MonitorSmartphone} title="Remote operation"
-                subtitle="A.P.A has the controls" onClose={onClose} bodyClass="p-0">
+                subtitle="Nexora has the controls" onClose={onClose} bodyClass="p-0">
                 <div className="relative bg-black/50" style={{ width: 560, height: 330 }}>
                     {shot ? (
                         <img src={`data:image/jpeg;base64,${shot}`} alt="Live screen" className="w-full h-full object-contain" />
@@ -312,7 +345,7 @@ export function ConfirmCard({ request, onResolve }) {
         <motion.div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <HoloPanel code="AUTH" accent="rose" icon={ShieldAlert} title="Authorisation required"
-                subtitle={`A.P.A wants to run ${request.tool}`} className="w-[440px]">
+                subtitle={`Nexora wants to run ${request.tool}`} className="w-[440px]">
                 <div className="rounded-md border border-white/10 bg-black/30 p-3 font-mono text-xs text-slate-300 max-h-40 overflow-auto">
                     {Object.keys(args).length === 0 ? <span className="text-slate-500">no arguments</span> :
                         Object.entries(args).map(([k, v]) => <div key={k}><span className="text-rose-300">{k}</span>: {String(v)}</div>)}
@@ -327,9 +360,9 @@ export function ConfirmCard({ request, onResolve }) {
 }
 
 /* ----------------------------------------------------------- STAGE ---- */
-const MAIN_TYPES = ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye'];
+const MAIN_TYPES = ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather'];
 
-const BEAM_COLOR = { weather: '#22d3ee', map: '#22d3ee', gods_eye: '#fbbf24', email_summary: '#f0abfc', email_view: '#f0abfc', computer: '#fbbf24' };
+const BEAM_COLOR = { weather: '#22d3ee', map: '#22d3ee', gods_eye: '#fbbf24', lk_weather: '#a78bfa', email_summary: '#f0abfc', email_view: '#f0abfc', computer: '#fbbf24' };
 
 export default function Stage({ widgets, computer, onDismiss, onOpenInbox, onAsk, onStop, onResume }) {
     const mains = widgets.filter((w) => MAIN_TYPES.includes(w.type));
@@ -367,6 +400,7 @@ export default function Stage({ widgets, computer, onDismiss, onOpenInbox, onAsk
                             {main.type === 'email_summary' && <EmailSummon widget={main} onClose={() => onDismiss(main.id)} onOpenInbox={onOpenInbox} onAsk={onAsk} />}
                             {main.type === 'computer' && <ComputerSummon steps={computer.steps} shot={computer.shot} onClose={() => onDismiss(main.id)} onStop={onStop} onResume={onResume} />}
                             {main.type === 'gods_eye' && <GodsEyeSummon widget={main} onClose={() => onDismiss(main.id)} />}
+                            {main.type === 'lk_weather' && <LkWeatherSummon widget={main} onClose={() => onDismiss(main.id)} />}
                           </BeamProvider>
                           </div>
                         </div>

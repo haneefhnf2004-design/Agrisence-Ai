@@ -231,7 +231,7 @@ export default function WidgetContainer({ widgets, onDismiss, onSendEmail, onAsk
                             <WeatherSummon data={weatherSummon.data} onClose={() => onDismiss(weatherSummon.id)} />
                         </motion.div>
                         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[10px] font-mono tracking-[0.4em] text-cyan-200/50">
-                            A.P.A SUMMON · CLICK VOID TO DISMISS
+                            NEXORA SUMMON · CLICK VOID TO DISMISS
                         </div>
                     </motion.div>
                 )}

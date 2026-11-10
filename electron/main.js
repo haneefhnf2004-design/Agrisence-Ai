@@ -9,16 +9,19 @@ app.commandLine.appendSwitch('enable-features', 'Vulkan');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 let mainWindow;
+// Started by Windows at login: stay hidden, voice listens, 'Hi Nexora' opens the window.
+const startHidden = process.env.NEXORA_HIDDEN === '1';
 let pythonProcess;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1920,
         height: 1080,
-        title: 'A.P.A V2',
+        title: 'Nexora V2',
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false, // For simple IPC/Socket.IO usage
+            backgroundThrottling: false, // keep listening for 'Hi Nexora' while hidden at login
         },
         backgroundColor: '#000000',
         frame: false, // Frameless for custom UI
@@ -39,7 +42,7 @@ function createWindow() {
             .then(() => {
                 console.log('Frontend loaded successfully!');
                 windowWasShown = true;
-                mainWindow.show();
+                if (!startHidden) mainWindow.show();
                 if (isDev) {
                     // DevTools disabled by default — they resize the viewport and break UI positioning
                     // Toggle with Ctrl+Shift+I if needed
@@ -72,7 +75,15 @@ function startPythonBackend() {
 
     // Portable: the APA_PYTHON environment variable wins, else the python on PATH.
     // (The old hardcoded C:\\Users\\WinDows\\... path only existed on one PC.)
-    const pythonPath = process.env.APA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+    // On Windows prefer Python 3.12 (pyaudio and our packages live there; plain 'python' may be a newer version without them).
+    let py312 = null;
+    if (!process.env.APA_PYTHON && process.platform === 'win32') {
+        try {
+            py312 = require('child_process').execFileSync('py', ['-3.12', '-c', 'import sys;print(sys.executable)'],
+                { encoding: 'utf8', timeout: 5000 }).trim() || null;
+        } catch (e) { /* no py launcher or no 3.12 */ }
+    }
+    const pythonPath = process.env.APA_PYTHON || py312 || (process.platform === 'win32' ? 'python' : 'python3');
 
     pythonProcess = spawn(pythonPath, [scriptPath], {
         cwd: path.join(__dirname, '../backend'),
@@ -105,6 +116,13 @@ app.whenReady().then(() => {
                 mainWindow.maximize();
             }
         }
+    });
+
+    ipcMain.on('window-show', () => {
+        if (!mainWindow) return;
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
     });
 
     ipcMain.on('window-close', () => {

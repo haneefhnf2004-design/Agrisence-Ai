@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, CheckCircle, Loader } from 'lucide-react';
 
-// ON = A.P.A must ask you before running the tool (backend default is ON).
+// ON = Nexora must ask you before running the tool (backend default is ON).
 const TOOLS = [
     { id: 'read_emails', label: 'Read emails' },
     { id: 'send_email', label: 'Send email' },

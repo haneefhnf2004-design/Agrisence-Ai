@@ -6,10 +6,10 @@ import * as THREE from 'three';
 // so state changes morph instead of snapping.
 const PROFILES = {
     offline:   { a: '#475569', b: '#7f1d1d', speed: 0.15, amp: 0.04, glow: 0.35, ring: 0.15 },
-    idle:      { a: '#0891b2', b: '#6d28d9', speed: 0.35, amp: 0.05, glow: 0.8,  ring: 0.35 },
-    listening: { a: '#22d3ee', b: '#10b981', speed: 0.55, amp: 0.07, glow: 1.0,  ring: 0.55 },
+    idle:      { a: '#a855f7', b: '#7c3aed', speed: 0.35, amp: 0.05, glow: 0.8,  ring: 0.35 },
+    listening: { a: '#a78bfa', b: '#d946ef', speed: 0.55, amp: 0.07, glow: 1.0,  ring: 0.55 },
     thinking:  { a: '#a78bfa', b: '#22d3ee', speed: 1.4,  amp: 0.11, glow: 1.15, ring: 1.4  },
-    speaking:  { a: '#67e8f9', b: '#f0abfc', speed: 0.9,  amp: 0.08, glow: 1.35, ring: 0.8  },
+    speaking:  { a: '#c084fc', b: '#e879f9', speed: 0.9,  amp: 0.08, glow: 1.1,  ring: 0.8  },
     summoning: { a: '#f0abfc', b: '#22d3ee', speed: 1.8,  amp: 0.12, glow: 1.5,  ring: 2.0  },
     focus:     { a: '#34d399', b: '#0ea5e9', speed: 0.25, amp: 0.04, glow: 0.7,  ring: 0.25 },
     alert:     { a: '#fb7185', b: '#f59e0b', speed: 1.1,  amp: 0.11, glow: 1.4,  ring: 1.2  },
@@ -43,13 +43,15 @@ float snoise(vec3 v){
 
 const shellVertex = /* glsl */ `
 uniform float uTime; uniform float uAmp; uniform float uLevel;
-varying vec3 vNormal; varying vec3 vView; varying float vNoise;
+varying vec3 vNormal; varying vec3 vView; varying float vNoise; varying vec3 vObj;
 ${NOISE}
 void main(){
   float n = snoise(normal * 1.6 + vec3(uTime * 0.6));
   float n2 = snoise(normal * 3.0 - vec3(uTime * 0.8)) * 0.18;
-  float d = (n + n2) * (uAmp + uLevel * 0.22);
-  vNoise = n;
+  // ridged noise = the torn, fibrous plasma edge
+  float ridge = pow(1.0 - abs(snoise(normal * 5.0 + vec3(uTime * 0.9))), 4.0);
+  float d = (n + n2) * (uAmp + uLevel * 0.22) + ridge * (0.12 + uLevel * 0.35);
+  vNoise = n; vObj = normal;
   vec3 pos = position + normal * d;
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   vView = normalize(-mv.xyz);
@@ -59,13 +61,18 @@ void main(){
 
 const shellFragment = /* glsl */ `
 uniform vec3 uColorA; uniform vec3 uColorB; uniform float uGlow; uniform float uTime;
-varying vec3 vNormal; varying vec3 vView; varying float vNoise;
+varying vec3 vNormal; varying vec3 vView; varying float vNoise; varying vec3 vObj;
+${NOISE}
 void main(){
-  float fres = pow(1.0 - max(dot(vNormal, vView), 0.0), 2.2);
+  float facing = max(dot(vNormal, vView), 0.0);
+  float fres = pow(1.0 - facing, 2.2);
   vec3 col = mix(uColorA, uColorB, smoothstep(-0.6, 0.8, vNoise));
-  float bands = 0.5 + 0.5 * sin(vNoise * 18.0 + uTime * 2.0);
-  vec3 c = col * (0.18 + 0.35 * bands) + col * fres * 1.6 * uGlow;
-  gl_FragColor = vec4(c, 0.55 + fres * 0.45);
+  // plasma fibres: thin bright veins crawling over the surface
+  float fib = pow(1.0 - abs(snoise(vObj * 9.0 + vec3(uTime * 1.3))), 8.0)
+            + pow(1.0 - abs(snoise(vObj * 17.0 - vec3(uTime))), 12.0) * 0.6;
+  vec3 c = col * (0.25 + fib * 1.8) * uGlow + col * fres * 1.4 * uGlow;
+  c = mix(c, vec3(1.0), pow(facing, 4.0) * 0.85 * uGlow); // white-hot centre
+  gl_FragColor = vec4(c, clamp(0.35 + fib + fres * 0.5, 0.0, 1.0));
 }`;
 
 function lerpColor(target, hex, k) {
@@ -100,7 +107,7 @@ function Shell({ profileRef, levelRef }) {
         <mesh ref={mesh}>
             <icosahedronGeometry args={[1, 64]} />
             <shaderMaterial ref={mat} uniforms={uniforms} vertexShader={shellVertex}
-                fragmentShader={shellFragment} transparent depthWrite={false} />
+                fragmentShader={shellFragment} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
     );
 }
@@ -119,7 +126,7 @@ function Core({ profileRef, levelRef }) {
     const uniforms = useMemo(() => ({ uColor: { value: new THREE.Color(PROFILES.idle.a) }, uPower: { value: 1 } }), []);
     useFrame(({ clock }) => {
         const p = profileRef.current;
-        const pulse = 0.55 + Math.sin(clock.elapsedTime * (1 + p.speed * 2)) * 0.03 + levelRef.current * 0.2;
+        const pulse = 0.62 + Math.sin(clock.elapsedTime * (1 + p.speed * 2)) * 0.03 + levelRef.current * 0.2;
         ref.current.scale.setScalar(pulse);
         lerpColor(mat.current.uniforms.uColor.value, p.a, 0.05);
         const u = mat.current.uniforms.uPower;
@@ -134,33 +141,110 @@ function Core({ profileRef, levelRef }) {
     );
 }
 
-function Rings({ profileRef }) {
+// Dyson lattice: a geodesic frame caged around the star. Brightens and breathes with her voice.
+// Soft bloom around the star: an inside-out sphere that glows brightest at its inner edge.
+const haloVertex = /* glsl */ `
+varying vec3 vN; varying vec3 vV;
+void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vV = normalize(-mv.xyz); vN = normalize(normalMatrix*normal); gl_Position = projectionMatrix*mv; }`;
+const haloFragment = /* glsl */ `
+uniform vec3 uColor; uniform float uPower;
+varying vec3 vN; varying vec3 vV;
+void main(){ float f = pow(max(dot(-vN, vV), 0.0), 3.0); gl_FragColor = vec4(uColor * f * uPower, f); }`;
+
+function Halo({ profileRef, levelRef }) {
+    const ref = useRef();
+    const mat = useRef();
+    const uniforms = useMemo(() => ({ uColor: { value: new THREE.Color(PROFILES.idle.a) }, uPower: { value: 1 } }), []);
+    useFrame(({ clock }) => {
+        const p = profileRef.current;
+        const l = levelRef.current;
+        ref.current.scale.setScalar(1.9 + l * 0.5 + Math.sin(clock.elapsedTime * 1.5) * 0.03);
+        lerpColor(mat.current.uniforms.uColor.value, p.a, 0.05);
+        const u = mat.current.uniforms.uPower;
+        u.value += ((0.5 + p.glow * 0.7 + l * 0.8) - u.value) * 0.08;
+    });
+    return (
+        <mesh ref={ref}>
+            <sphereGeometry args={[1, 48, 48]} />
+            <shaderMaterial ref={mat} uniforms={uniforms} vertexShader={haloVertex} fragmentShader={haloFragment}
+                side={THREE.BackSide} transparent blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+    );
+}
+
+function Lattice({ profileRef, levelRef }) {
     const group = useRef();
-    const rings = useMemo(() => [
-        { r: 1.45, tilt: [1.2, 0.2, 0], w: 0.004 },
-        { r: 1.62, tilt: [0.4, 1.0, 0.3], w: 0.003 },
-        { r: 1.85, tilt: [1.6, -0.6, 0.8], w: 0.006 },
-    ], []);
-    const mats = useRef([]);
+    const line = useRef();
+    const node = useRef();
+    const geo = useMemo(() => new THREE.IcosahedronGeometry(1.32, 2), []);
     useFrame((_, dt) => {
         const p = profileRef.current;
-        group.current.children.forEach((m, i) => {
-            m.rotation.z += dt * p.ring * (i % 2 ? -0.6 : 0.8);
-            m.rotation.x += dt * p.ring * 0.15 * (i + 1);
-        });
-        mats.current.forEach((m) => { if (m) lerpColor(m.color, p.a, 0.04); });
+        const l = levelRef.current;
+        group.current.rotation.y -= dt * 0.06 * (0.5 + p.ring);
+        group.current.rotation.x += dt * 0.02;
+        group.current.scale.setScalar(1 + l * 0.06);
+        lerpColor(line.current.color, p.a, 0.04);
+        lerpColor(node.current.color, p.b, 0.04);
+        line.current.opacity += ((0.06 + l * 0.25) - line.current.opacity) * 0.15;
+        node.current.size += ((0.025 + l * 0.04) - node.current.size) * 0.15;
     });
     return (
         <group ref={group}>
-            {rings.map((g, i) => (
-                <mesh key={i} rotation={g.tilt}>
-                    <torusGeometry args={[g.r, g.w, 8, 160]} />
-                    <meshBasicMaterial ref={(m) => (mats.current[i] = m)} color={PROFILES.idle.a}
-                        transparent opacity={0.55} blending={THREE.AdditiveBlending} depthWrite={false} />
-                </mesh>
-            ))}
+            <lineSegments>
+                <wireframeGeometry args={[geo]} />
+                <lineBasicMaterial ref={line} color={PROFILES.idle.a} transparent opacity={0.06} blending={THREE.AdditiveBlending} depthWrite={false} />
+            </lineSegments>
+            <points geometry={geo}>
+                <pointsMaterial ref={node} size={0.035} color={PROFILES.idle.b} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} sizeAttenuation />
+            </points>
         </group>
     );
+}
+
+// Dyson swarm: rings of collector panels orbiting the star. Speech sends a wave through each ring.
+const SWARM = [
+    { r: 1.55, tilt: [1.25, 0.2, 0], n: 90, speed: 0.35 },
+    { r: 1.7, tilt: [0.35, 1.0, 0.3], n: 100, speed: -0.28 },
+    { r: 1.88, tilt: [1.6, -0.6, 0.8], n: 120, speed: 0.22 },
+    { r: 2.05, tilt: [-0.5, 0.4, 1.4], n: 110, speed: -0.18 },
+    { r: 1.62, tilt: [0.9, -1.2, -0.4], n: 80, speed: 0.3 },
+];
+
+function SwarmRing({ ring, profileRef, levelRef }) {
+    const mesh = useRef();
+    const mat = useRef();
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+    const a = useRef(Math.random() * Math.PI * 2);
+    const base = useMemo(() => new THREE.Color(), []);
+    useFrame(({ clock }, dt) => {
+        const p = profileRef.current;
+        const l = levelRef.current;
+        const t = clock.elapsedTime;
+        a.current += dt * ring.speed * (0.6 + p.ring + l * 2.5);
+        for (let i = 0; i < ring.n; i++) {
+            const th = a.current + (i / ring.n) * Math.PI * 2;
+            const lift = 1 + l * 0.14 * Math.sin(th * 6 - t * 9) + Math.sin(th * 3 + t) * 0.01;
+            dummy.position.set(Math.cos(th) * ring.r * lift, Math.sin(th) * ring.r * lift, 0);
+            dummy.lookAt(0, 0, 0);
+            dummy.scale.setScalar(1 + l * 0.6 * Math.max(0, Math.sin(th * 6 - t * 9)));
+            dummy.updateMatrix();
+            mesh.current.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.current.instanceMatrix.needsUpdate = true;
+        base.set(p.a).multiplyScalar(0.4 + l * 1.4);
+        mat.current.color.lerp(base, 0.2);
+    });
+    return (
+        <instancedMesh ref={mesh} args={[null, null, ring.n]} rotation={ring.tilt}>
+            <planeGeometry args={[0.07, 0.04]} />
+            <meshBasicMaterial ref={mat} color={PROFILES.idle.a} side={THREE.DoubleSide} transparent opacity={0.5}
+                blending={THREE.AdditiveBlending} depthWrite={false} />
+        </instancedMesh>
+    );
+}
+
+function Swarm(props) {
+    return <group>{SWARM.map((r, i) => <SwarmRing key={i} ring={r} {...props} />)}</group>;
 }
 
 function Particles({ profileRef, levelRef, count = 900 }) {
@@ -191,38 +275,64 @@ function Particles({ profileRef, levelRef, count = 900 }) {
             <bufferGeometry>
                 <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
             </bufferGeometry>
-            <pointsMaterial ref={mat} size={0.022} color={PROFILES.idle.b} transparent opacity={0.8}
+            <pointsMaterial ref={mat} size={0.018} color={PROFILES.idle.b} transparent opacity={0.5}
                 blending={THREE.AdditiveBlending} depthWrite={false} sizeAttenuation />
         </points>
     );
 }
 
-function CameraRig({ distRef }) {
+// Eases the shared voice level so glow and scale glide instead of flashing.
+function LevelSmoother({ targetRef, levelRef }) {
+    useFrame(() => { levelRef.current += (targetRef.current - levelRef.current) * 0.08; });
+    return null;
+}
+
+// Cinematic camera: slow orbit, gentle crane and roll, pushes in while she speaks.
+function CameraRig({ distRef, levelRef }) {
     const { camera } = useThree();
-    useFrame(() => { camera.position.z += (distRef.current - camera.position.z) * 0.06; });
+    const push = useRef(0);
+    useFrame(({ clock }) => {
+        const t = clock.elapsedTime;
+        push.current += (levelRef.current - push.current) * 0.04;
+        const d = distRef.current - push.current * 0.7;
+        const yaw = Math.sin(t * 0.06) * 0.45;
+        camera.position.x += (Math.sin(yaw) * d - camera.position.x) * 0.04;
+        camera.position.z += (Math.cos(yaw) * d - camera.position.z) * 0.04;
+        camera.position.y += (Math.sin(t * 0.09) * 0.55 - camera.position.y) * 0.04;
+        camera.lookAt(0, 0, 0);
+        camera.rotateZ(Math.sin(t * 0.05) * 0.035);
+    });
     return null;
 }
 
 /**
- * Orb3D: the living core of A.P.A.
+ * Orb3D: the living core of Nexora, a Dyson sphere around a star.
  *  state  – offline | idle | listening | thinking | speaking | summoning | focus | alert
  *  level  – 0..1 voice energy (AI speech or mic), drives the surface ripple
  */
 export default function Orb3D({ state = 'idle', level = 0, compact = false, className = '', style }) {
     const profileRef = useRef(PROFILES.idle);
     const levelRef = useRef(0);
+    const targetRef = useRef(0);
     profileRef.current = PROFILES[state] || PROFILES.idle;
-    levelRef.current = Math.max(0, Math.min(1, level));
+    // Raw voice level jumps every frame and made the orb strobe; LevelSmoother eases toward a softer target.
+    targetRef.current = Math.max(0, Math.min(1, level)) * 0.6;
     const distRef = useRef(5.2);
     distRef.current = compact ? 6.8 : 5.2;
     return (
         <div className={className} style={style}>
             <Canvas camera={{ position: [0, 0, 5.2], fov: 45 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
-                <CameraRig distRef={distRef} />
+                <LevelSmoother targetRef={targetRef} levelRef={levelRef} />
+                <CameraRig distRef={distRef} levelRef={levelRef} />
                 <Particles profileRef={profileRef} levelRef={levelRef} />
-                <Rings profileRef={profileRef} />
-                <Core profileRef={profileRef} levelRef={levelRef} />
-                <Shell profileRef={profileRef} levelRef={levelRef} />
+                <Swarm profileRef={profileRef} levelRef={levelRef} />
+                <Lattice profileRef={profileRef} levelRef={levelRef} />
+                {/* the star the sphere is built around */}
+                <Halo profileRef={profileRef} levelRef={levelRef} />
+                <group scale={1.0}>
+                    <Core profileRef={profileRef} levelRef={levelRef} />
+                    <Shell profileRef={profileRef} levelRef={levelRef} />
+                </group>
             </Canvas>
         </div>
     );

@@ -1,4 +1,4 @@
-# 🛡️ A.P.A V2: Presentation & Defense Guidelines
+# 🛡️ Nexora V2: Presentation & Defense Guidelines
 **Project:** Autonomous Personal Assistant (V2)  
 **Phase:** 1 (Architecture & Research Design)  
 **Core Concept:** A multi-modal AI bridge between an LLM and local machine control.
@@ -8,7 +8,7 @@
 ## 🎯 1. The High-Level Narrative (The "Pitch")
 *When asked "What is this project?", use this narrative:*
 
-"A.P.A V2 is a **Multi-modal Autonomous Personal Assistant**. Unlike standard AI chatbots that exist only in a browser tab, A.P.A V2 is designed as a system-level companion. It integrates **Real-time Audio Streaming**, **Computer Vision**, and **Autonomous Tool Execution** to manage a user's digital life—specifically starting with intelligent email management and desktop automation. The core philosophy is **'Human-in-the-loop'**, ensuring the AI proposes actions that the user must explicitly confirm before execution."
+"Nexora V2 is a **Multi-modal Autonomous Personal Assistant**. Unlike standard AI chatbots that exist only in a browser tab, Nexora V2 is designed as a system-level companion. It integrates **Real-time Audio Streaming**, **Computer Vision**, and **Autonomous Tool Execution** to manage a user's digital life—specifically starting with intelligent email management and desktop automation. The core philosophy is **'Human-in-the-loop'**, ensuring the AI proposes actions that the user must explicitly confirm before execution."
 
 ---
 

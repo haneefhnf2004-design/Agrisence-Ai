@@ -1,4 +1,4 @@
-"""God's Eye: live world feeds for A.P.A's globe. All free, no API keys.
+"""God's Eye: live world feeds for Nexora's globe. All free, no API keys.
 
 Layers
   flights      live aircraft around a place   (OpenSky Network, anonymous)
@@ -15,7 +15,7 @@ import requests
 
 from weather_service import geocode_city
 
-UA = {"User-Agent": "APA-V2-Assistant/1.0 (student project)"}
+UA = {"User-Agent": "Nexora-V2-Assistant/1.0 (student project)"}
 OPENSKY = "https://opensky-network.org/api/states/all"
 USGS = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
 ISS = "https://api.wheretheiss.at/v1/satellites/25544"

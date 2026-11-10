@@ -1,6 +1,6 @@
 """Proactive Interruption Engine.
 
-Turns A.P.A's email monitor into an attention-policy agent: every high-priority
+Turns Nexora's email monitor into an attention-policy agent: every high-priority
 email is scored for interrupt-worthiness before the decision to speak is made,
 and every decision is persisted as research evidence (JSONL).
 

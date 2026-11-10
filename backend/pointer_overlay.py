@@ -1,4 +1,4 @@
-"""A.P.A's own on-screen pointer: a glowing ring + label drawn on top of every window.
+"""Nexora's own on-screen pointer: a glowing ring + label drawn on top of every window.
 
 Usage: python pointer_overlay.py X Y [label] [seconds] [color]
 It is click-through and never touches the real mouse. Runs as its own process

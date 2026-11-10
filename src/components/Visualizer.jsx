@@ -180,7 +180,7 @@ const Visualizer = ({ audioData, isListening, intensity = 0, width = 600, height
                         className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-white to-purple-300 font-bold tracking-[0.3em] drop-shadow-[0_0_20px_rgba(34,211,238,0.8)]"
                         style={{ fontSize: Math.min(width, height) * 0.09 }}
                     >
-                        A.P.A
+                        Nexora
                     </motion.div>
                     <div
                         className="mt-2 text-[10px] font-mono tracking-[0.4em] px-3 py-1 rounded-full border backdrop-blur-sm"

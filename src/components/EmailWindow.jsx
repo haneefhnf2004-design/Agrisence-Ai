@@ -115,7 +115,7 @@ const EmailWindow = ({ socket, onClose, onCompose }) => {
                                     )}
                                     {email.image_count > 0 && (
                                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-200 border border-fuchsia-400/20 inline-flex items-center gap-1"
-                                            title="A.P.A. looked at these images">
+                                            title="Nexora looked at these images">
                                             <ImageIcon size={9} /> {email.image_count}
                                         </span>
                                     )}

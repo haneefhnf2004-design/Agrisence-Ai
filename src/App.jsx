@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Mic, MicOff, Settings, X, Minus, Square as Maximize, Power, Mail, Target, Send,
     Activity, CloudSun, MapPin, MonitorSmartphone, Check, Loader2, Ban, Sparkles, Eye, Crosshair, FolderOpen,
+    Cpu, Clock, Hammer, MailCheck, CalendarDays,
 } from 'lucide-react';
 
 import Orb3D from './components/Orb3D';
@@ -17,6 +18,7 @@ import { sfx } from './sfx';
 import { OrbHud, ScreenFrame } from './components/holo/Hud';
 import Boot from './components/holo/Boot';
 import Bluey from './components/holo/Bluey';
+import { HardwareStrip, ProcessList } from './components/holo/SystemPanel';
 
 const socket = io('http://localhost:8000');
 let ipcRenderer = null;
@@ -29,6 +31,7 @@ try {
 const TOOL_META = {
     read_emails: { label: 'Scanning inbox', icon: Mail },
     show_email: { label: 'Opening email', icon: Mail },
+    reply_to_email: { label: 'Replying in thread', icon: Send },
     send_email: { label: 'Sending email', icon: Send },
     get_weather: { label: 'Weather lock', icon: CloudSun },
     show_map: { label: 'Map lock', icon: MapPin },
@@ -37,6 +40,13 @@ const TOOL_META = {
     computer_open: { label: 'Opening', icon: FolderOpen },
     start_focus_session: { label: 'Focus session', icon: Target },
     control_focus_session: { label: 'Focus control', icon: Target },
+    get_datetime: { label: 'Checking date & time', icon: Clock },
+    get_system_stats: { label: 'Laptop health', icon: Cpu },
+    sri_lanka_weather: { label: 'Sri Lanka weather', icon: CloudSun },
+    omniroute_task: { label: 'Building with OmniRoute', icon: Hammer },
+    draft_replies_for_all: { label: 'Drafting replies', icon: Mail },
+    send_reply_drafts: { label: 'Sending replies', icon: MailCheck },
+    show_nexora_window: { label: 'Waking up', icon: Sparkles },
 };
 const toolMeta = (name) => TOOL_META[name] || (name?.startsWith('computer_')
     ? { label: name.replace('computer_', '').replace(/_/g, ' '), icon: MonitorSmartphone }
@@ -108,6 +118,7 @@ function App() {
     const [showFocus, setShowFocus] = useState(false);
     const [rightTab, setRightTab] = useState('log');
     const [clock, setClock] = useState(new Date());
+    const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
     const [mouse, setMouse] = useState({ x: 0, y: 0 });
     useEffect(() => {
@@ -142,9 +153,9 @@ function App() {
         socket.on('connect', () => { setSocketConnected(true); socket.emit('get_settings'); socket.emit('focus_history'); setTimeout(() => blueyTalk("Hi! I'm Bluey, your focus buddy. Tap me to start focusing!", 7000), 8200); });
         socket.on('disconnect', () => { setSocketConnected(false); setIsApaReady(false); });
         socket.on('status', (d) => {
-            if (d.msg === 'A.P.A Started' || d.msg === 'A.P.A Already Running') setIsApaReady(true);
-            else if (d.msg === 'A.P.A Stopped') setIsApaReady(false);
-            if (!['Connected to A.P.A Backend'].includes(d.msg)) addMessage('System', d.msg);
+            if (d.msg === 'Nexora Started' || d.msg === 'Nexora Already Running') setIsApaReady(true);
+            else if (d.msg === 'Nexora Stopped') setIsApaReady(false);
+            if (!['Connected to Nexora Backend'].includes(d.msg)) addMessage('System', d.msg);
         });
         socket.on('audio_data', (d) => setAiAudioData(d.data || [0]));
         socket.on('error', (d) => pushWidget({ type: 'error', data: { title: 'System fault', message: d.msg } }));
@@ -180,6 +191,8 @@ function App() {
                 setWidgets((prev) => (prev.some((w) => w.type === 'computer') ? prev : [...prev, { id: `w-c${Date.now()}`, type: 'computer' }]));
                 return;
             }
+            if (d.type === 'show_window') { ipcRenderer?.send('window-show'); return; }
+            if (d.type === 'system_focus') { setRightTab('system'); return; }
             if (d.type === 'computer_screenshot') { setComputer((c) => ({ ...c, shot: d.data.image })); return; }
             if (d.type === 'focus_nudge') { sfx.chirp(); setNudge({ id: Date.now(), ...d.data }); blueyTalk(d.data.text + (d.data.point_text ? ` Look at: "${d.data.point_text}"` : ''), 12000); return; }
             const w = pushWidget(d);
@@ -193,6 +206,7 @@ function App() {
             return d;
         }));
         socket.on('bluey_state', (d) => setBlueyDesktop(!!d.on));
+        socket.on('system_stats', setSysStats);
         socket.on('focus_history', (d) => setFocusHistory(d.sessions || []));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
@@ -216,7 +230,7 @@ function App() {
         return () => {
             clearInterval(t);
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
-                'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state'].forEach((e) => socket.off(e));
+                'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -297,7 +311,7 @@ function App() {
 
     /* ------------------------------------------------------- state ---- */
     const audioAmp = aiAudioData.reduce((a, b) => a + b, 0) / Math.max(1, aiAudioData.length) / 255;
-    const mainSummon = widgets.some((w) => ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye'].includes(w.type));
+    const mainSummon = widgets.some((w) => ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather'].includes(w.type));
     // Layout follows the summon with a lag on recall: panels fly back into the docked orb first,
     // then the orb glides home and the sidebars reopen (otherwise panels chase an orb that has left).
     const [summonLayout, setSummonLayout] = useState(false);
@@ -332,9 +346,10 @@ function App() {
     return (
         <ErrorBoundary>
             <div className="h-screen w-screen overflow-hidden app-bg text-slate-200 font-mono select-none flex flex-col">
+                <div className="cinema-fx" aria-hidden="true" />
                 {/* ---------- top bar ---------- */}
                 <header className="h-12 shrink-0 flex items-center gap-4 px-4 border-b border-white/5 bg-black/30 backdrop-blur-md" style={{ WebkitAppRegion: 'drag' }}>
-                    <span className="text-base font-bold tracking-[0.35em] bg-gradient-to-r from-cyan-200 to-fuchsia-200 bg-clip-text text-transparent">A.P.A</span>
+                    <span className="text-base font-bold tracking-[0.35em] bg-gradient-to-r from-cyan-200 to-fuchsia-200 bg-clip-text text-transparent">NEXORA</span>
                     <span className="text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-slate-500">V2.1</span>
                     <div className="flex gap-2 ml-2">
                         <StatusChip on={socketConnected} label={socketConnected ? 'CORE' : 'CORE OFFLINE'} />
@@ -343,7 +358,11 @@ function App() {
                         {escalationCount > 0 && <StatusChip warn label={`${escalationCount} ESCALATED`} />}
                     </div>
                     <div className="flex-1" />
-                    <span className="text-[11px] text-slate-400 tabular-nums">{clock.toLocaleTimeString()}</span>
+                    <span className="flex items-center gap-2 text-[11px] text-slate-400 tabular-nums">
+                        <CalendarDays size={12} className="text-violet-300/70" />
+                        {clock.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                        <span className="text-violet-200">{clock.toLocaleTimeString()}</span>
+                    </span>
                     <div className="flex gap-1" style={{ WebkitAppRegion: 'no-drag' }}>
                         <button aria-label="Minimise" title="Minimise" onClick={() => ipcRenderer?.send('window-minimize')} className="p-1.5 rounded hover:bg-white/10 text-slate-300"><Minus size={16} /></button>
                         <button aria-label="Maximise" title="Maximise" onClick={() => ipcRenderer?.send('window-maximize')} className="p-1.5 rounded hover:bg-white/10 text-slate-300"><Maximize size={14} /></button>
@@ -367,7 +386,7 @@ function App() {
                             {messages.map((m, i) => (
                                 <div key={i} className={m.sender === 'User' ? 'text-right' : ''}>
                                     <div className={`text-[9px] tracking-[0.2em] mb-0.5 ${m.sender === 'ADA' ? 'text-cyan-400/70' : m.sender === 'User' ? 'text-fuchsia-300/70' : 'text-slate-600'}`}>
-                                        {m.sender === 'ADA' ? 'A.P.A' : m.sender === 'User' ? 'YOU' : 'SYSTEM'} · {m.time}
+                                        {m.sender === 'ADA' ? 'NEXORA' : m.sender === 'User' ? 'YOU' : 'SYSTEM'} · {m.time}
                                     </div>
                                     <div className={`inline-block text-[13px] leading-relaxed px-3 py-2 rounded-xl max-w-full text-left font-sans
                                         ${m.sender === 'ADA' ? 'bg-cyan-400/[0.06] border border-cyan-300/10 text-slate-100' : m.sender === 'User' ? 'bg-fuchsia-400/[0.08] border border-fuchsia-300/10 text-slate-100' : 'text-slate-500 text-xs'}`}>
@@ -405,7 +424,7 @@ function App() {
                         <motion.div className="shrink-0 text-center -mt-6 mb-3 px-6 z-10" animate={{ x: summonLayout ? -window.innerWidth * 0.28 : 0, opacity: summonLayout ? 0.85 : 1 }} transition={{ type: 'spring', stiffness: 60, damping: 16 }}>
                             <div className={`text-xs tracking-[0.5em] ${orbState === 'offline' ? 'text-rose-300' : orbState === 'alert' ? 'text-amber-300' : 'text-cyan-200'}`}>{STATE_TEXT[orbState]}</div>
                             <div className="h-10 mt-2 text-sm text-slate-300 font-sans max-w-[640px] mx-auto line-clamp-2">
-                                {!socketConnected ? 'Start the Python backend (backend/server.py) to bring A.P.A online.' : caption}
+                                {!socketConnected ? 'Start the Python backend (backend/server.py) to bring Nexora online.' : caption}
                             </div>
                         </motion.div>
                         <motion.div className="absolute left-12 bottom-24 z-[45]" initial={{ opacity: 0, scale: 0.4 }}
@@ -427,8 +446,9 @@ function App() {
 
                     {/* ---------- right: activity ---------- */}
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
+                        <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'MISSION LOG', Activity], ['focus', 'FOCUS', Target]].map(([k, l, I]) => (
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target]].map(([k, l, I]) => (
                                 <button key={k} onClick={() => setRightTab(k)}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
@@ -436,8 +456,8 @@ function App() {
                             ))}
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                            {rightTab === 'log' ? (
-                                tasks.length === 0 ? <div className="text-xs text-slate-500">Every task A.P.A runs shows up here, live.</div> : (
+                            {rightTab === 'system' ? <ProcessList stats={sysStats} /> : rightTab === 'log' ? (
+                                tasks.length === 0 ? <div className="text-xs text-slate-500">Every task Nexora runs shows up here, live.</div> : (
                                     <div className="space-y-2">
                                         {[...tasks].reverse().map((t) => {
                                             const meta = toolMeta(t.tool);

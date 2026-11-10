@@ -127,7 +127,7 @@ export function FocusLauncher({ open, focus, onStart, onClose, onDevMode, onTest
                         ))}
                     </div>
                     <div className="mt-4 text-[11px] text-slate-400 leading-relaxed">
-                        While the session runs, A.P.A looks at your main screen every 30 s and sends a reduced screenshot to Gemini to judge
+                        While the session runs, Nexora looks at your main screen every 30 s and sends a reduced screenshot to Gemini to judge
                         on-task vs off-task. Pause before opening anything private.
                     </div>
                     <div className="flex items-center justify-between mt-4">

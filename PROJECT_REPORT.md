@@ -1,4 +1,4 @@
-# A.P.A V2 — Autonomous Personal Assistant (Email Edition)
+# Nexora V2 — Autonomous Personal Assistant (Email Edition)
 
 ## Project Report
 
@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-A.P.A V2 is a voice-enabled desktop email assistant powered by Google's Gemini 2.5 Flash AI. It allows users to read, analyze, classify, and send emails through natural voice conversations or typed chat. The system uses zero-shot learning via a pre-trained Large Language Model (LLM) to perform email classification, sentiment analysis, priority detection, escalation identification, confidence scoring, and tone-matched draft reply generation — all without requiring a custom-trained model or labeled dataset.
+Nexora V2 is a voice-enabled desktop email assistant powered by Google's Gemini 2.5 Flash AI. It allows users to read, analyze, classify, and send emails through natural voice conversations or typed chat. The system uses zero-shot learning via a pre-trained Large Language Model (LLM) to perform email classification, sentiment analysis, priority detection, escalation identification, confidence scoring, and tone-matched draft reply generation — all without requiring a custom-trained model or labeled dataset.
 
 The application runs as an Electron desktop app with a Python backend, using WebSocket (Socket.IO) for real-time communication and the Gemini Live API for bidirectional voice streaming.
 
@@ -295,6 +295,6 @@ VERTEX_ENABLED=false
 
 ## 9. Conclusion
 
-A.P.A V2 demonstrates that a powerful email assistant can be built using pre-trained LLMs with zero-shot learning, eliminating the need for custom datasets, model training, and ML infrastructure. The system achieves accurate email classification, sentiment analysis, and intelligent reply generation through prompt engineering alone, while batch processing and caching optimize API costs.
+Nexora V2 demonstrates that a powerful email assistant can be built using pre-trained LLMs with zero-shot learning, eliminating the need for custom datasets, model training, and ML infrastructure. The system achieves accurate email classification, sentiment analysis, and intelligent reply generation through prompt engineering alone, while batch processing and caching optimize API costs.
 
 This approach represents a modern paradigm in applied ML: leveraging foundation models as the AI backbone and focusing engineering effort on integration, UX, and optimization rather than model development.

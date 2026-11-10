@@ -1,10 +1,10 @@
 # Project Performance, Task & Experience Report (PTE)
-## Project Title: A.P.A V2 - Autonomous Personal Assistant
+## Project Title: Nexora V2 - Autonomous Personal Assistant
 
 ---
 
 ### 1. Project Overview
-A.P.A V2 is a multi-modal AI desktop assistant designed to streamline user workflows through voice interaction, computer vision, and autonomous web operations. The project bridges the gap between Large Language Models (LLMs) and local machine control, featuring a high-performance Electron frontend and an asynchronous Python backend powered by the **Gemini 2.5 Flash** model.
+Nexora V2 is a multi-modal AI desktop assistant designed to streamline user workflows through voice interaction, computer vision, and autonomous web operations. The project bridges the gap between Large Language Models (LLMs) and local machine control, featuring a high-performance Electron frontend and an asynchronous Python backend powered by the **Gemini 2.5 Flash** model.
 
 ---
 
@@ -98,7 +98,7 @@ This project provided hands-on experience in several advanced software engineeri
 ---
 
 ### 6. Conclusion
-A.P.A V2 demonstrates a successful implementation of a "Human-in-the-loop" AI assistant. By combining natural language processing with precise computer vision and hardware control, the project proves that LLMs can be effectively used to manage complex, multi-step digital and physical tasks.
+Nexora V2 demonstrates a successful implementation of a "Human-in-the-loop" AI assistant. By combining natural language processing with precise computer vision and hardware control, the project proves that LLMs can be effectively used to manage complex, multi-step digital and physical tasks.
 
 **Status**: Fully Operational
 **Last Updated**: May 25, 2026

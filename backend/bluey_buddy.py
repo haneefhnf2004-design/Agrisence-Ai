@@ -1,12 +1,12 @@
-"""Bluey: A.P.A's desktop companion and background HUD.
+"""Bluey: Nexora's desktop companion and background HUD.
 
 A googly-eyed blueberry that lives on top of your screen.
 - Eyes follow your real mouse; blinks; bobs.
-- Background HUD: while A.P.A works minimised, a mini panel next to Bluey shows
+- Background HUD: while Nexora works minimised, a mini panel next to Bluey shows
   every step live (running / done / denied) and what Ada is saying.
 - Ask Bluey: click Bluey, type a command, press Enter; Ada does it.
-- Double-click Bluey: bring the A.P.A window back.
-- When A.P.A points at something, Bluey flies there and points at it.
+- Double-click Bluey: bring the Nexora window back.
+- When Nexora points at something, Bluey flies there and points at it.
 - Only Bluey's own pixels catch clicks; everything transparent passes through.
 
 Runs as its own process. Backend -> Bluey: JSON lines appended to BLUEY_CMD_FILE.
@@ -161,7 +161,7 @@ def main():
             say(f"On it: \"{text[:60]}\"", "focus", 4)
             st["working_until"] = time.time() + 20
         else:
-            say(res.get("error") or "A.P.A's voice is off. Turn it on first!", "worried", 6)
+            say(res.get("error") or "Nexora's voice is off. Turn it on first!", "worried", 6)
 
     def open_ask(_=None):
         if st["asking"]:
@@ -192,15 +192,15 @@ def main():
         try:
             import pygetwindow as gw
             for w in gw.getAllWindows():
-                if "A.P.A" in (w.title or "") or "A.D.A" in (w.title or ""):
+                if "Nexora" in (w.title or "") or "A.D.A" in (w.title or ""):
                     if w.isMinimized:
                         w.restore()
                     w.activate()
-                    say("Here's A.P.A!", "happy", 3)
+                    say("Here's Nexora!", "happy", 3)
                     return
         except Exception:
             pass
-        say("I couldn't find the A.P.A window.", "worried", 4)
+        say("I couldn't find the Nexora window.", "worried", 4)
 
     def on_click(e):
         if math.hypot(e.x - BX, e.y - (BY + math.sin(st["bob"]) * 4)) <= R + 8:
@@ -245,7 +245,7 @@ def main():
             dot = "#7c5b10"
         c.create_oval(HUD_X + 12, y + 12, HUD_X + 20, y + 20, fill=dot, outline="")
         c.create_text(HUD_X + 28, y + 16, anchor="w", fill="#a5f3fc", font=("Consolas", 9, "bold"),
-                      text="A.P.A · WORKING IN BACKGROUND" if working else "A.P.A · STANDING BY")
+                      text="NEXORA · WORKING IN BACKGROUND" if working else "NEXORA · STANDING BY")
         yy = y + 34
         spin = "|/-\\"[int(now * 8) % 4]
         for t in recent:
@@ -319,10 +319,10 @@ def main():
             c.create_oval(ex2 - 6, ey2 - 6, ex2 + 6, ey2 + 6, fill="#5b7bff", outline="")
         if st["asking"]:
             c.create_text(HUD_X + 8, H - 62, anchor="w", fill="#a5f3fc", font=("Consolas", 9, "bold"),
-                          text="ASK A.P.A · Enter to send · Esc to cancel")
+                          text="ASK NEXORA · Enter to send · Esc to cancel")
         elif time.time() - st["hello"] < 8:
             c.create_text(W - 8, BY + R + 18, anchor="e", fill="#94a3b8", font=("Segoe UI", 8),
-                          text="click me to ask · double-click: open A.P.A")
+                          text="click me to ask · double-click: open Nexora")
 
     # ---------------- commands from the backend ----------------
     def read_cmds():
@@ -404,7 +404,7 @@ def main():
         draw_bluey()
         root.after(33, tick)
 
-    say("Hi! I'm Bluey. Click me to ask A.P.A anything.", "happy", 6)
+    say("Hi! I'm Bluey. Click me to ask Nexora anything.", "happy", 6)
     tick()
     root.mainloop()
     try:

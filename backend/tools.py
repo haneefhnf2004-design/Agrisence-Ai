@@ -20,6 +20,20 @@ show_email_tool = {
         "required": ["query"]}
 }
 
+reply_to_email_tool = {
+    "name": "reply_to_email",
+    "description": "Replies to an email so the reply stays in the same conversation thread (sets the In-Reply-To and References "
+                   "headers and replies to the original sender). Use this instead of send_email whenever the user is answering "
+                   "an email. By default it replies to the email currently open on screen (from show_email). Read the draft to "
+                   "the user before sending.",
+    "parameters": {"type": "OBJECT", "properties": {
+        "body": {"type": "STRING", "description": "The reply text."},
+        "query": {"type": "STRING", "description": "Optional: which email to reply to (sender or subject words, or 'latest'). "
+                                                   "Leave empty to reply to the email currently open on screen."},
+        "cc": {"type": "STRING", "description": "Optional comma-separated CC addresses."}},
+        "required": ["body"]}
+}
+
 send_email_tool = {    "name": "send_email",
     "description": "Sends an email with optional priority flag.",
     "parameters": {
@@ -55,7 +69,7 @@ computer_list_windows_tool = {
 
 computer_screenshot_tool = {
     "name": "computer_screenshot",
-    "description": "Takes a screenshot of the user's screen and shows it on the A.P.A interface. Read-only.",
+    "description": "Takes a screenshot of the user's screen and shows it on the Nexora interface. Read-only.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -147,7 +161,7 @@ show_map_tool = {
 
 start_focus_session_tool = {
     "name": "start_focus_session",
-    "description": "Starts a focus session. While it runs, A.P.A checks the screen every 30 seconds and gently nudges the user if they stay off-task. Use when the user says they want to focus or work on something for a while.",
+    "description": "Starts a focus session. While it runs, Nexora checks the screen every 30 seconds and gently nudges the user if they stay off-task. Use when the user says they want to focus or work on something for a while.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -180,7 +194,7 @@ computer_find_text_tool = {
 
 computer_point_tool = {
     "name": "computer_point",
-    "description": "A.P.A's OWN cursor: shows a glowing pointer on the user's screen to show them where to look, WITHOUT moving their mouse or clicking. Give either visible text to point at, or x/y from the latest screenshot. Read-only, use freely.",
+    "description": "Nexora's OWN cursor: shows a glowing pointer on the user's screen to show them where to look, WITHOUT moving their mouse or clicking. Give either visible text to point at, or x/y from the latest screenshot. Read-only, use freely.",
     "parameters": {"type": "OBJECT", "properties": {
         "text": {"type": "STRING", "description": "Visible text of the thing to point at."},
         "x": {"type": "INTEGER", "description": "X in the latest screenshot's pixels."},
@@ -220,10 +234,61 @@ gods_eye_tool = {
         "radius_km": {"type": "NUMBER", "description": "Scan radius in km (flights default 200)."}}, "required": ["layer"]}
 }
 
+get_datetime_tool = {
+    "name": "get_datetime",
+    "description": "Current local date, day and time on the user's laptop (Sri Lanka time). Call it whenever time, date, day, deadlines or 'today/tomorrow' matter.",
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
+get_system_stats_tool = {
+    "name": "get_system_stats",
+    "description": "Live laptop hardware and Task Manager data: CPU, RAM, GPU, disk, battery, network and the busiest processes.",
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
+sri_lanka_weather_tool = {
+    "name": "sri_lanka_weather",
+    "description": "Current weather, today's high/low and rain chance for ALL 25 districts of Sri Lanka, shown on screen.",
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
+omniroute_task_tool = {
+    "name": "omniroute_task",
+    "description": "BUILD ENGINE: hands a big job to OmniRoute, which routes across every connected AI model with automatic fallback. "
+                   "Use for university assignments, programming projects, reports, essays, study notes, algorithms and data structures, "
+                   "debugging, or any task needing long, careful output. Files are saved to Desktop/Nexora Builds and the folder opens.",
+    "parameters": {"type": "OBJECT", "properties": {
+        "task": {"type": "STRING", "description": "The full task with every requirement the user gave (language, length, format, marking criteria)."},
+        "model": {"type": "STRING", "description": "Optional OmniRoute model or combo id. Leave empty for 'auto' (best available)."}},
+        "required": ["task"]}
+}
+
+draft_replies_for_all_tool = {
+    "name": "draft_replies_for_all",
+    "description": "Drafts a reply for every recent email that needs one (skips no-reply and newsletter senders) and shows them. "
+                   "Read the drafts to the user, then call send_reply_drafts only after they agree.",
+    "parameters": {"type": "OBJECT", "properties": {
+        "limit": {"type": "INTEGER", "description": "How many recent emails to look at (default 10)."}}}
+}
+
+send_reply_drafts_tool = {
+    "name": "send_reply_drafts",
+    "description": "Sends the replies prepared by draft_replies_for_all, each in its own thread. The user approves them on screen first.",
+    "parameters": {"type": "OBJECT", "properties": {
+        "skip": {"type": "ARRAY", "items": {"type": "INTEGER"}, "description": "Draft numbers (1-based) the user does NOT want sent."}}}
+}
+
+show_nexora_window_tool = {
+    "name": "show_nexora_window",
+    "description": "Opens/brings Nexora's main window to the front. Call it when the user says 'Hi Nexora', 'open Nexora' or similar while the window is hidden.",
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
         show_email_tool,
+        reply_to_email_tool,
         send_email_tool,
         get_weather_tool,
         computer_list_windows_tool,
@@ -243,5 +308,12 @@ tools_list = [{
         computer_open_tool,
         start_focus_session_tool,
         control_focus_session_tool,
+        get_datetime_tool,
+        get_system_stats_tool,
+        sri_lanka_weather_tool,
+        omniroute_task_tool,
+        draft_replies_for_all_tool,
+        send_reply_drafts_tool,
+        show_nexora_window_tool,
     ]
-}]
+}, {"google_search": {}}]  # live web search for news and current events

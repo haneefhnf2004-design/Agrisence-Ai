@@ -1,9 +1,9 @@
-"""Computer Control Bridge: gives A.P.A eyes and hands on the Windows desktop.
+"""Computer Control Bridge: gives Nexora eyes and hands on the Windows desktop.
 
 Native implementation (no external MCP server needed):
   - eyes:   Pillow ImageGrab screenshots, window list, Windows UI Automation tree
   - hands:  pyautogui mouse/keyboard, clipboard paste for Unicode text
-  - pointer: A.P.A's OWN cursor, a click-through glowing ring drawn on top of the
+  - pointer: Nexora's OWN cursor, a click-through glowing ring drawn on top of the
             screen (pointer_overlay.py). It shows the user where to look
             without moving their real mouse (the idea comes from Bluey).
 
@@ -32,7 +32,7 @@ READONLY_COMPUTER_TOOLS = {
     "computer_list_windows",
     "computer_screenshot",
     "computer_find_text",
-    "computer_point",          # A.P.A's own pointer: never touches the real mouse
+    "computer_point",          # Nexora's own pointer: never touches the real mouse
 }
 SAFETY_COMPUTER_TOOLS = {"computer_emergency_stop"}
 ACTUATOR_COMPUTER_TOOLS = {
@@ -108,11 +108,11 @@ def _windows():
     return out
 
 
-ADA_TITLES = ("A.P.A V2", "A.D.A")
+ADA_TITLES = ("Nexora V2", "A.D.A")
 
 
 def _hide_ada():
-    """Minimise A.P.A's own window so screenshots/clicks hit the user's real desktop."""
+    """Minimise Nexora's own window so screenshots/clicks hit the user's real desktop."""
     try:
         for w in _windows():
             if any(t in w.title for t in ADA_TITLES) and not w.isMinimized:
@@ -123,7 +123,7 @@ def _hide_ada():
 
 
 def _target_window():
-    """Top-most visible window that is not A.P.A itself."""
+    """Top-most visible window that is not Nexora itself."""
     for w in _windows():
         if not any(t in w.title for t in ADA_TITLES) and not w.isMinimized:
             return w
@@ -175,7 +175,7 @@ def _center(ctrl):
 
 
 def _show_pointer(x, y, label="", seconds=4.0, color="#22d3ee"):
-    """Spawn A.P.A's pointer overlay at native pixel (x, y). Non-blocking."""
+    """Spawn Nexora's pointer overlay at native pixel (x, y). Non-blocking."""
     script = os.path.join(_HERE, "pointer_overlay.py")
     flags = 0x08000000 if sys.platform == "win32" else 0   # CREATE_NO_WINDOW
     subprocess.Popen([sys.executable, script, str(int(x)), str(int(y)), str(label)[:60], str(seconds), color],
@@ -230,7 +230,7 @@ SAFE_APPS = {"notepad": "notepad.exe", "calculator": "calc.exe", "calc": "calc.e
 def _run(name, args):
     out = {"texts": [], "images": [], "raw_images": [], "is_error": False}
     if name in ACTUATOR_COMPUTER_TOOLS and _state["stopped"]:
-        return {**out, "texts": ["Computer control is under EMERGENCY STOP. Ask the user to resume it in A.P.A."], "is_error": True}
+        return {**out, "texts": ["Computer control is under EMERGENCY STOP. Ask the user to resume it in Nexora."], "is_error": True}
 
     if name in ACTUATOR_COMPUTER_TOOLS or name in ("computer_screenshot", "computer_point"):
         _hide_ada()
