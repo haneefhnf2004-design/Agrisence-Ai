@@ -196,6 +196,7 @@ focus_engine = FocusEngine(classify=make_gemini_classifier(ada.client), on_event
 import system_monitor
 import lk_weather
 import lk_news
+from memory import memory as memory_engine
 
 
 async def _system_stats_loop():
@@ -762,6 +763,19 @@ async def focus_test_nudge(sid, data=None):
     _focus_event('focus_nudge', {'t': st.get('elapsed', 0), 'task': st.get('task', 'your task'),
                                  'app': 'test', 'reason': 'test nudge', 'point_text': '',
                                  'text': 'Test nudge: this is how I will bring you back on task.'})
+
+@sio.event
+async def get_memories(sid, data=None):
+    limit = (data or {}).get('limit', 50)
+    mems = await asyncio.to_thread(memory_engine.get_all_memories, limit)
+    await sio.emit('memories_list', {'memories': mems}, room=sid)
+
+@sio.event
+async def delete_memory(sid, data=None):
+    mid = (data or {}).get('id')
+    if mid is not None:
+        ok = await asyncio.to_thread(memory_engine.delete_memory, mid)
+        await sio.emit('memory_deleted', {'id': mid, 'ok': ok}, room=sid)
 
 if __name__ == "__main__":
     uvicorn.run(

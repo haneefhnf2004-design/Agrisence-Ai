@@ -19,3 +19,10 @@ requests
 # Computer control (native: mouse/keyboard, window list, UI Automation)
 pyautogui
 uiautomation; sys_platform == "win32"
+
+# Memory / RAG
+sentence-transformers
+torch
+SpeechRecognition
+PyMuPDF
+python-docx

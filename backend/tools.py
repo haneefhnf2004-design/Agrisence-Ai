@@ -149,7 +149,7 @@ computer_emergency_stop_tool = {
 
 show_map_tool = {
     "name": "show_map",
-    "description": "Pulls up the cinematic 3D globe and zooms into a map of any place (city, country, landmark). Use when the user asks to show, find, or pull up a place on the map.",
+    "description": "Pulls up any place (city, town, area, building, landmark) like Google Earth: the globe flies into a satellite view with 3D buildings, and a place card shows its district, Wikipedia summary, photo and nearby landmarks. Returns those details so you can describe the area. Use when the user asks to show, find, see or pull up a place or location.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -295,6 +295,32 @@ show_nexora_window_tool = {
     "parameters": {"type": "OBJECT", "properties": {}}
 }
 
+save_memory_tool = {
+    "name": "save_memory",
+    "description": "Saves something important to long-term memory so Nexora can remember it in future conversations. Use for user preferences, important facts, tasks, or anything the user wants remembered.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "content": {"type": "STRING", "description": "What to remember."},
+            "category": {"type": "STRING", "description": "Category: preference, fact, task, or conversation.", "enum": ["preference", "fact", "task", "conversation"]},
+            "tags": {"type": "STRING", "description": "Optional comma-separated tags."}
+        },
+        "required": ["content"]
+    }
+}
+
+recall_memory_tool = {
+    "name": "recall_memory",
+    "description": "Searches long-term memory for relevant information before answering. Call this whenever the user asks about something that might have been remembered before, or references their preferences.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "query": {"type": "STRING", "description": "What to search for in memory."}
+        },
+        "required": ["query"]
+    }
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -327,5 +353,7 @@ tools_list = [{
         draft_replies_for_all_tool,
         send_reply_drafts_tool,
         show_nexora_window_tool,
+        save_memory_tool,
+        recall_memory_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events

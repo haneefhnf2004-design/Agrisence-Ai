@@ -117,6 +117,7 @@ function App() {
     const [showCompose, setShowCompose] = useState(false);
     const [showFocus, setShowFocus] = useState(false);
     const [rightTab, setRightTab] = useState('log');
+    const [memories, setMemories] = useState([]);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -191,6 +192,12 @@ function App() {
                 setWidgets((prev) => (prev.some((w) => w.type === 'computer') ? prev : [...prev, { id: `w-c${Date.now()}`, type: 'computer' }]));
                 return;
             }
+            // area details arrive a few seconds after the map; fill them into the open map card
+            if (d.type === 'map_details') {
+                setWidgets((prev) => prev.map((w) => (w.type === 'map' && w.data?.lat === d.data.lat && w.data?.lon === d.data.lon
+                    ? { ...w, data: { ...w.data, details: d.data.details } } : w)));
+                return;
+            }
             if (d.type === 'show_window') { ipcRenderer?.send('window-show'); return; }
             if (d.type === 'system_focus') { setRightTab('system'); return; }
             if (d.type === 'computer_screenshot') { setComputer((c) => ({ ...c, shot: d.data.image })); return; }
@@ -208,6 +215,8 @@ function App() {
         socket.on('bluey_state', (d) => setBlueyDesktop(!!d.on));
         socket.on('system_stats', setSysStats);
         socket.on('focus_history', (d) => setFocusHistory(d.sessions || []));
+        socket.on('memories_list', (d) => setMemories(d.memories || []));
+        socket.on('memory_deleted', (d) => { if (d.ok) setMemories(prev => prev.filter(m => m.id !== d.id)); });
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -230,7 +239,8 @@ function App() {
         return () => {
             clearInterval(t);
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
-                'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats'].forEach((e) => socket.off(e));
+                'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
+                'memories_list', 'memory_deleted'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -448,8 +458,8 @@ function App() {
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => setRightTab(k)}
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles]].map(([k, l, I]) => (
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'memory') socket.emit('get_memories'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -480,10 +490,38 @@ function App() {
                                         })}
                                     </div>
                                 )
+                            ) : rightTab === 'memory' ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500">LONG-TERM MEMORY</div>
+                                        <button
+                                            onClick={() => { socket.emit('get_memories'); }}
+                                            className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider"
+                                        >REFRESH</button>
+                                    </div>
+                                    {memories.length === 0 ? (
+                                        <div className="text-xs text-slate-500">No memories yet. Tell Nexora to remember something.</div>
+                                    ) : (
+                                        memories.map(mem => (
+                                            <div key={mem.id} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1">
+                                                        <div className="text-[9px] tracking-[0.2em] text-fuchsia-300/70 mb-0.5">{(mem.category || 'fact').toUpperCase()}</div>
+                                                        <div className="text-xs text-slate-200 leading-relaxed">{mem.content}</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => socket.emit('delete_memory', { id: mem.id })}
+                                                        className="shrink-0 p-1 rounded hover:bg-rose-400/20 text-rose-400/60 hover:text-rose-300 transition-colors"
+                                                        title="Delete memory"
+                                                    ><X size={11} /></button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             ) : (
                                 <div className="space-y-5">
-                                    {focus.active ? (
-                                        <div>
+                                    {focus.active ? (                                        <div>
                                             <div className="text-[10px] tracking-[0.25em] text-emerald-300 mb-2">CURRENT · {focus.task}</div>
                                             <FocusTimeline checks={focus.checks} total={focus.planned_minutes * 60} elapsed={focus.elapsed} />
                                             <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
