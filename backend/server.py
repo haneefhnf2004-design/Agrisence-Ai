@@ -246,6 +246,15 @@ except Exception as _ee_err:
     event_engine = None
     _EVENTS_AVAILABLE = False
 
+try:
+    from knowledge_graph import KnowledgeGraph
+    kg_engine = KnowledgeGraph()
+    _KG_AVAILABLE = True
+except Exception as _kg_err:
+    print(f'[KG] Knowledge graph unavailable: {_kg_err}')
+    kg_engine = None
+    _KG_AVAILABLE = False
+
 
 def _on_wake_word():
     """Called by wake word listener thread → emit socket event to all clients."""
@@ -1052,6 +1061,44 @@ async def fire_event_rule(sid, data=None):
     rule_id = (data or {}).get('rule_id')
     if rule_id:
         await asyncio.to_thread(event_engine.fire_rule, rule_id)
+
+
+@sio.event
+async def get_knowledge_graph(sid, data=None):
+    if not kg_engine:
+        await sio.emit('kg_data', {'nodes': [], 'edges': [], 'stats': {'node_count': 0, 'edge_count': 0, 'available': False}}, room=sid)
+        return
+    entities = await asyncio.to_thread(kg_engine.get_all_entities, 100)
+    stats = await asyncio.to_thread(kg_engine.stats)
+    await sio.emit('kg_data', {'entities': entities, 'stats': stats}, room=sid)
+
+@sio.event
+async def add_kg_entity(sid, data=None):
+    if not kg_engine: return
+    data = data or {}
+    node_id = await asyncio.to_thread(kg_engine.add_entity, data.get('name', 'Unknown'), data.get('entity_type', 'concept'), data.get('properties', {}))
+    entities = await asyncio.to_thread(kg_engine.get_all_entities, 100)
+    stats = await asyncio.to_thread(kg_engine.stats)
+    await sio.emit('kg_data', {'entities': entities, 'stats': stats}, room=sid)
+
+@sio.event
+async def delete_kg_entity(sid, data=None):
+    if not kg_engine: return
+    node_id = (data or {}).get('node_id')
+    if node_id:
+        await asyncio.to_thread(kg_engine.delete_entity, node_id)
+        entities = await asyncio.to_thread(kg_engine.get_all_entities, 100)
+        stats = await asyncio.to_thread(kg_engine.stats)
+        await sio.emit('kg_data', {'entities': entities, 'stats': stats}, room=sid)
+
+@sio.event
+async def search_kg(sid, data=None):
+    if not kg_engine:
+        await sio.emit('kg_search_results', {'results': []}, room=sid)
+        return
+    query = (data or {}).get('query', '')
+    results = await asyncio.to_thread(kg_engine.search_graph, query)
+    await sio.emit('kg_search_results', {'results': results}, room=sid)
 
 
 if __name__ == "__main__":

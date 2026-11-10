@@ -128,6 +128,9 @@ function App() {
     const [missionDetail, setMissionDetail] = useState(null);
     const [eventRules, setEventRules] = useState([]);
     const [eventHistory, setEventHistory] = useState([]);
+    const [kgData, setKgData] = useState({ entities: [], stats: { node_count: 0, edge_count: 0 } });
+    const [kgSearch, setKgSearch] = useState('');
+    const [kgSearchResults, setKgSearchResults] = useState([]);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -253,6 +256,8 @@ function App() {
         socket.on('event_fired', (d) => {
             setEventHistory(prev => [d, ...prev].slice(0, 20));
         });
+        socket.on('kg_data', setKgData);
+        socket.on('kg_search_results', (d) => setKgSearchResults(d.results || []));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -290,7 +295,8 @@ function App() {
                 'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error',
                 'feedback_stats', 'feedback_list', 'datasets_list',
                 'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail',
-                'event_rules_list', 'event_history', 'event_fired'].forEach((e) => socket.off(e));
+                'event_rules_list', 'event_history', 'event_fired',
+                'kg_data', 'kg_search_results'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -511,7 +517,7 @@ function App() {
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
                             {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer], ['events', 'EVENTS', Activity]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); }}
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') { socket.emit('get_memories'); socket.emit('get_knowledge_graph'); } else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -570,6 +576,57 @@ function App() {
                                             </div>
                                         ))
                                     )}
+                                    {/* Knowledge Graph section */}
+                                    <div className="mt-4 pt-4 border-t border-white/5">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="text-[10px] tracking-[0.25em] text-slate-500">KNOWLEDGE GRAPH</div>
+                                            <button onClick={() => socket.emit('get_knowledge_graph')} className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider">REFRESH</button>
+                                        </div>
+                                        <div className="flex gap-2 mb-3">
+                                            <div className="flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-center">
+                                                <div className="text-lg text-fuchsia-400 font-mono">{kgData.stats?.node_count || 0}</div>
+                                                <div className="text-[9px] text-slate-500">ENTITIES</div>
+                                            </div>
+                                            <div className="flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-center">
+                                                <div className="text-lg text-cyan-400 font-mono">{kgData.stats?.edge_count || 0}</div>
+                                                <div className="text-[9px] text-slate-500">RELATIONS</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 mb-2">
+                                            <input
+                                                value={kgSearch}
+                                                onChange={e => setKgSearch(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter' && kgSearch.trim()) socket.emit('search_kg', { query: kgSearch }); }}
+                                                placeholder="Search graph…" className="holo-input flex-1 text-xs" />
+                                            <button onClick={() => kgSearch.trim() && socket.emit('search_kg', { query: kgSearch })} className="px-2 rounded-lg border border-cyan-300/30 text-cyan-200 hover:bg-cyan-400/10 text-xs">GO</button>
+                                        </div>
+                                        {kgSearchResults.length > 0 && (
+                                            <div className="space-y-1 mb-2">
+                                                {kgSearchResults.map((e, i) => (
+                                                    <div key={i} className="text-[10px] px-2 py-1 rounded border border-fuchsia-300/10 bg-fuchsia-400/5">
+                                                        <span className="text-fuchsia-300">{e.name}</span>
+                                                        <span className="text-slate-500 ml-1">· {e.type}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {(kgData.entities || []).length > 0 && kgSearchResults.length === 0 && (
+                                            <div className="space-y-1">
+                                                {(kgData.entities || []).slice(0, 8).map((e, i) => (
+                                                    <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 rounded border border-white/5 bg-white/[0.02]">
+                                                        <div>
+                                                            <span className="text-slate-200">{e.name}</span>
+                                                            <span className="text-slate-500 ml-1">· {e.type}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-slate-600">{e.degree} links</span>
+                                                            <button onClick={() => socket.emit('delete_kg_entity', { node_id: e.id })} className="text-rose-400/60 hover:text-rose-300"><X size={9} /></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ) : rightTab === 'train' ? (
                                 <div className="space-y-4">

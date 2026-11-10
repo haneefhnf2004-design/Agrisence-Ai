@@ -7,6 +7,12 @@ import json
 import sqlite3
 import time
 
+try:
+    from knowledge_graph import KnowledgeGraph as _KG
+    _kg_instance = _KG()
+except Exception:
+    _kg_instance = None
+
 # Try to load sentence-transformers for semantic embeddings.
 try:
     from sentence_transformers import SentenceTransformer as _SentenceTransformer
@@ -100,6 +106,11 @@ class MemoryEngine:
                     (content, category, tags_json, embedding_json, now, now)
                 )
                 conn.commit()
+                if _kg_instance:
+                    try:
+                        _kg_instance.extract_and_add(content, 'memory')
+                    except Exception:
+                        pass
                 return {'id': cur.lastrowid, 'content': content, 'category': category, 'tags': tags}
         except Exception as e:
             print(f"[MEMORY] save_memory error: {e}")

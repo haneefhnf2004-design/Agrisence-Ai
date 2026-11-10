@@ -365,6 +365,22 @@ manage_events_tool = {
     }
 }
 
+knowledge_graph_tool = {
+    "name": "knowledge_graph",
+    "description": "Searches or adds to the knowledge graph. Use to find connections between people, projects, concepts, and events that Nexora has learned about.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "enum": ["search", "add_entity", "get_all"], "description": "search: find related entities, add_entity: add a new entity, get_all: list all entities."},
+            "query": {"type": "STRING", "description": "Search query (for search action)."},
+            "entity_name": {"type": "STRING", "description": "Entity name (for add_entity)."},
+            "entity_type": {"type": "STRING", "description": "Entity type: person, project, document, concept, event, task, decision."},
+            "properties": {"type": "STRING", "description": "JSON string of additional properties."}
+        },
+        "required": ["action"]
+    }
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -402,5 +418,6 @@ tools_list = [{
         search_knowledge_tool,
         create_mission_tool,
         manage_events_tool,
+        knowledge_graph_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events

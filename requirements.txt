@@ -30,3 +30,6 @@ python-docx
 # Event-driven automation
 watchdog
 schedule
+
+# Knowledge Graph
+networkx
