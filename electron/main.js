@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -12,6 +12,8 @@ let mainWindow;
 // Started by Windows at login: stay hidden, voice listens, 'Hi Nexora' opens the window.
 const startHidden = process.env.NEXORA_HIDDEN === '1';
 let pythonProcess;
+let appQuitting = false;
+let backendRestarts = 0; // reset once the backend stays up for a minute
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -27,6 +29,12 @@ function createWindow() {
         frame: false, // Frameless for custom UI
         titleBarStyle: 'hidden',
         show: false, // Don't show until ready
+    });
+
+    // Links (e.g. news stories) open in the user's browser, never inside this Node-enabled window.
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+        return { action: 'deny' };
     });
 
     // In dev, load Vite server. In prod, load index.html
@@ -100,6 +108,22 @@ function startPythonBackend() {
 
     pythonProcess.stderr.on('data', (data) => {
         console.error(`[Python Error]: ${data}`);
+    });
+
+    // Log why the backend stopped, and bring it back unless the app is closing.
+    const startedAt = Date.now();
+    const proc = pythonProcess;
+    proc.on('exit', (code, signal) => {
+        console.error(`[Python] Backend exited (code=${code}, signal=${signal}) after ${Math.round((Date.now() - startedAt) / 1000)}s`);
+        if (appQuitting || pythonProcess !== proc) return;
+        if (Date.now() - startedAt > 60000) backendRestarts = 0;
+        if (backendRestarts >= 5) {
+            console.error('[Python] Backend keeps crashing; gave up after 5 restarts. Check the log above.');
+            return;
+        }
+        backendRestarts++;
+        console.log(`[Python] Restarting backend (attempt ${backendRestarts}/5)...`);
+        setTimeout(() => { if (!appQuitting) startPythonBackend(); }, 2000);
     });
 }
 
@@ -200,6 +224,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+    appQuitting = true;
     console.log('App closing... Killing Python backend.');
     if (pythonProcess) {
         if (process.platform === 'win32') {

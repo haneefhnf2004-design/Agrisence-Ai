@@ -19,10 +19,11 @@ from weather_service import city_weather, geocode_city
 import gods_eye
 import system_monitor
 import lk_weather
+import lk_news
 import omniroute_client
 from datetime import datetime
 from proactive import ActivitySignals, ProactiveEngine, build_spoken_prompt
-from computer_bridge import call_computer_tool, READONLY_COMPUTER_TOOLS, SAFETY_COMPUTER_TOOLS, ALLOWED_COMPUTER_TOOLS
+from computer_bridge import call_computer_tool, ALLOWED_COMPUTER_TOOLS
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
@@ -109,7 +110,11 @@ config = types.LiveConnectConfig(
         "10. REPLY TO ALL EMAILS: draft_replies_for_all drafts replies for every email that needs one; read them out, then "
         "send_reply_drafts once the user agrees (they also approve on screen). Never send without that.\n"
         "11. WAKE: when the user says 'Hi Nexora' / 'Hey Nexora' / 'open Nexora', call show_nexora_window, then greet them.\n"
-        "12. LIVE WORLD UPDATES: use google_search for news, current events, prices, scores or anything that may have "
+        "12. SRI LANKA NEWS: for any Sri Lanka news, headlines or updates call sri_lanka_news (live, with photos on screen); "
+        "use hours=3 for breaking/real-time, a topic for a subject, language 'ta' or 'si' if the user asks in Tamil/Sinhala. "
+        "Read the 3-5 most important stories briefly in the user's language. You may also get a 'Breaking news' system "
+        "event: mention it in ONE short sentence.\n"
+        "13. LIVE WORLD UPDATES: use google_search for world news, current events, prices, scores or anything that may have "
         "changed recently. Never guess about recent events; search, then answer briefly.\n"
         "For anything else, be a helpful conversational assistant."
     ),
@@ -124,9 +129,9 @@ config = types.LiveConnectConfig(
 )
 
 # Tools handled by AudioLoop._run_nexora_tool, and the ones among them that never need an approval click.
-NEXORA_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "omniroute_task",
+NEXORA_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task",
                 "draft_replies_for_all", "send_reply_drafts", "show_nexora_window")
-NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "omniroute_task", "show_nexora_window")
+NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window")
 
 pya = pyaudio.PyAudio()
 
@@ -407,13 +412,9 @@ class AudioLoop:
                                 # show_email reads mail, so it follows the read_emails permission
                                 perm_key = {"show_email": "read_emails", "reply_to_email": "send_email",
                                             "draft_replies_for_all": "read_emails", "send_reply_drafts": "send_email"}.get(fc.name, fc.name)
-                                confirmation_required = self.permissions.get(perm_key, True)
-                                if fc.name in ("get_weather", "show_map", "gods_eye", "start_focus_session", "control_focus_session", *NO_CONFIRM_TOOLS):
-                                    confirmation_required = False  # read-only / user asked for it by voice
-                                elif fc.name in SAFETY_COMPUTER_TOOLS:
-                                    confirmation_required = False  # emergency stop: kill-switch must never be gated
-                                elif fc.name in READONLY_COMPUTER_TOOLS:
-                                    confirmation_required = False  # looking at the screen is harmless
+                                # Full-access personal assistant: everything runs straight away except sending
+                                # email, which keeps its on-screen approval (emails it reads could try to trick it).
+                                confirmation_required = perm_key == "send_email" and self.permissions.get("send_email", True)
 
                                 if not confirmation_required:
                                     print(f"[ADA DEBUG] [TOOL] Permission check: '{fc.name}' -> AUTO-ALLOW")
@@ -727,6 +728,7 @@ class AudioLoop:
                 rate=RECEIVE_SAMPLE_RATE,
                 output=True,
                 output_device_index=self.output_device_index,
+                frames_per_buffer=4096,  # bigger device buffer = fewer underruns (choppy voice)
             )
         except Exception as e:
             print(f"[ADA] Failed to open audio output stream: {e}")
@@ -735,20 +737,37 @@ class AudioLoop:
         playback_queue = queue.Queue()
         self.event_loop = asyncio.get_running_loop()
 
+        # Gemini sends audio in bursts. Collect ~300 ms before starting each reply so
+        # network gaps don't turn into gaps in the voice.
+        PREBUFFER_BYTES = int(RECEIVE_SAMPLE_RATE * 2 * 0.3)  # 16-bit mono
+
         def playback_thread():
+            idle = True
             while not self.stop_event.is_set():
                 try:
-                    bytestream = playback_queue.get(timeout=1.0)
+                    bytestream = playback_queue.get(timeout=0.5)
                     if bytestream is None:
                         break
+                    if idle:
+                        deadline = time.monotonic() + 0.4
+                        while len(bytestream) < PREBUFFER_BYTES and time.monotonic() < deadline:
+                            try:
+                                more = playback_queue.get(timeout=0.05)
+                            except queue.Empty:
+                                continue
+                            if more is None:
+                                return
+                            bytestream += more
+                        idle = False
                     if self.on_audio_data:
                         try:
-                            self.event_loop.call_soon_threadsafe(lambda: self.on_audio_data(bytestream))
+                            self.event_loop.call_soon_threadsafe(self.on_audio_data, bytestream)
                         except Exception:
                             pass
                     if stream.is_active():
                         stream.write(bytestream)
                 except queue.Empty:
+                    idle = True  # reply finished; buffer again before the next one
                     continue
                 except Exception as e:
                     err_str = str(e).lower()
@@ -787,6 +806,8 @@ class AudioLoop:
         await self._check_emails_subconscious()
 
         last_email_check = time.time()
+        news_watch = lk_news.BreakingWatcher()
+        last_news_check, last_news_alert = 0.0, 0.0
 
         while not self.stop_event.is_set():
             try:
@@ -794,10 +815,36 @@ class AudioLoop:
                 if now - last_email_check > 120:
                     last_email_check = now
                     await self._check_emails_subconscious()
+                if now - last_news_check > 600:  # real-time Sri Lanka news, every 10 min
+                    last_news_check = now
+                    last_news_alert = await self._check_breaking_news(news_watch, last_news_alert)
                 await asyncio.sleep(3)
             except Exception as e:
                 print(f"[ADA SUBCONSCIOUS] Monitor error: {e}")
                 await asyncio.sleep(5)
+
+    async def _check_breaking_news(self, watcher, last_alert):
+        """Show new Sri Lanka headlines on screen and mention them, at most every 30 min and never while busy."""
+        try:
+            fresh = await asyncio.wait_for(asyncio.to_thread(watcher.new_items), timeout=45.0)
+        except Exception as e:
+            print(f"[NEWS] Breaking check failed: {e}")
+            return last_alert
+        if not fresh:
+            return last_alert
+        print(f"[NEWS] {len(fresh)} new Sri Lanka headline(s)")
+        now = time.time()
+        busy = now < self.signals.busy_until or self.signals.mic_open or self._is_model_speaking
+        if busy or now - last_alert < 1800 or not self.session:
+            return last_alert
+        self._push_widget("lk_news", {"query": "Breaking · Sri Lanka", "items": fresh[:6]})
+        heads = " | ".join(f"{x['title']} ({x['source']})" for x in fresh[:3])
+        try:
+            await self.session.send(input=f"System Event: Breaking news in Sri Lanka: {heads}. "
+                                          "Tell the user the most important one in ONE short sentence.", end_of_turn=True)
+        except Exception as e:
+            print(f"[NEWS] speak failed: {e}")
+        return now
 
     async def _check_emails_subconscious(self):
         if not self.email_agent or not self.email_agent.connected:
@@ -891,6 +938,20 @@ class AudioLoop:
             self._push_widget("lk_weather", res)
             rows = "; ".join(f"{d['district']} {d['temp']}C {d['description']}, rain {d['rain_chance']}%" for d in res["districts"])
             return f"{res['summary']} All districts: {rows}"
+
+        if name == "sri_lanka_news":
+            try:
+                hours = int(args.get("hours") or 24)
+            except (TypeError, ValueError):
+                hours = 24
+            res = await asyncio.wait_for(asyncio.to_thread(
+                lk_news.fetch, (args.get("topic") or "").strip() or None, max(1, min(hours, 168)),
+                (args.get("language") or "en").strip().lower()[:2]), timeout=40.0)
+            if "error" in res:
+                self._push_widget("error", {"title": "Sri Lanka News", "message": res["error"]})
+            else:
+                self._push_widget("lk_news", res)
+            return lk_news.spoken(res)
 
         if name == "omniroute_task":
             task = (args.get("task") or "").strip()

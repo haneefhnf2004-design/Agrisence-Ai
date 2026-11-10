@@ -9,7 +9,7 @@ Native implementation (no external MCP server needed):
 
 Safety model (unchanged):
   - read-only tools (look / list / point) run without confirmation;
-  - actuator tools (click / type / keys / open) go through ADA's confirmation gate;
+  - actuator tools (click / type / keys / open) run straight away (full-access mode; only sending email needs approval);
   - computer_emergency_stop instantly disables every actuator until resumed;
   - pyautogui FAILSAFE: slam the mouse into a screen corner to abort.
 

@@ -195,6 +195,7 @@ focus_engine = FocusEngine(classify=make_gemini_classifier(ada.client), on_event
 
 import system_monitor
 import lk_weather
+import lk_news
 
 
 async def _system_stats_loop():
@@ -216,11 +217,17 @@ async def _daily_briefing_loop():
             if "error" not in res:
                 lk_weather.mark_daily_done()
                 await sio.emit('widget_update', {'type': 'lk_weather', 'data': res})
+                news = await asyncio.to_thread(lk_news.fetch, None, 24, "en", 8)
+                heads = ""
+                if "error" not in news and news["items"]:
+                    await sio.emit('widget_update', {'type': 'lk_news', 'data': news})
+                    heads = " Then the top Sri Lanka news in 3 short sentences from these headlines: " + \
+                            " | ".join(x["title"] for x in news["items"][:6])
                 if audio_loop is not None and audio_loop.session:
                     try:
                         await audio_loop.session.send(input=(
                             "System Event: daily morning briefing. Greet the user, say today's date (call get_datetime), "
-                            f"and give a 3-sentence Sri Lanka weather update from this data: {res['summary']}"), end_of_turn=True)
+                            f"and give a 3-sentence Sri Lanka weather update from this data: {res['summary']}.{heads}"), end_of_turn=True)
                     except Exception as e:
                         print(f"[DAILY] speak failed: {e}")
         await asyncio.sleep(60)

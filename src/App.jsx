@@ -311,7 +311,7 @@ function App() {
 
     /* ------------------------------------------------------- state ---- */
     const audioAmp = aiAudioData.reduce((a, b) => a + b, 0) / Math.max(1, aiAudioData.length) / 255;
-    const mainSummon = widgets.some((w) => ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather'].includes(w.type));
+    const mainSummon = widgets.some((w) => ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather', 'lk_news'].includes(w.type));
     // Layout follows the summon with a lag on recall: panels fly back into the docked orb first,
     // then the orb glides home and the sidebars reopen (otherwise panels chase an orb that has left).
     const [summonLayout, setSummonLayout] = useState(false);

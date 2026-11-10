@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, CloudSun, Mail, MonitorSmartphone, ShieldAlert, AlertTriangle, XOctagon, Check, X, Reply, Inbox, Crosshair, Plane, Activity, Satellite, Eye, Play, MailOpen, Image as ImageIcon } from 'lucide-react';
+import { MapPin, CloudSun, Mail, MonitorSmartphone, ShieldAlert, AlertTriangle, XOctagon, Check, X, Reply, Inbox, Crosshair, Plane, Activity, Satellite, Eye, Play, MailOpen, Image as ImageIcon, Newspaper } from 'lucide-react';
 import RadarMap from './RadarMap';
 import { FlyRow, Beams, BeamProvider } from './Fly';
 import GlobeStage from '../GlobeStage';
@@ -117,6 +117,52 @@ function LkWeatherSummon({ widget, onClose }) {
                     ))}
                 </div>
                 <div className="mt-3 text-[9px] font-mono text-slate-500">SOURCE · OPEN-METEO · DAILY 7 AM BRIEFING</div>
+            </HoloPanel>
+        </FlyRow>
+    );
+}
+
+/* ---------------------------------------------------- SRI LANKA NEWS ---- */
+function LkNewsSummon({ widget, onClose }) {
+    const d = widget.data || {};
+    const items = d.items || [];
+    const lead = items.find((x) => x.image);
+    const [broken, setBroken] = useState({});
+    const hide = (k) => setBroken((b) => ({ ...b, [k]: true }));
+    return (
+        <FlyRow>
+            <HoloPanel code="NEWS-LK" accent="rose" icon={Newspaper} title="Sri Lanka · live news"
+                subtitle={`${d.query || 'Sri Lanka'} · ${items.length} stories`} onClose={onClose} className="w-[560px]">
+                {lead && !broken.lead && (
+                    <a href={lead.link} target="_blank" rel="noreferrer" className="block relative mb-3 rounded-lg overflow-hidden border border-white/10">
+                        <img src={lead.image} alt="" referrerPolicy="no-referrer" onError={() => hide('lead')}
+                            className="w-full h-[200px] object-cover" />
+                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+                            <div className="text-[13px] text-white font-medium leading-snug">{lead.title}</div>
+                            <div className="text-[10px] font-mono text-rose-200/80 mt-1">{lead.source} · {lead.ago}</div>
+                        </div>
+                    </a>
+                )}
+                <div className="max-h-[360px] overflow-y-auto custom-scrollbar pr-1 space-y-1">
+                    {items.filter((x) => x !== lead || broken.lead).map((x, i) => (
+                        <motion.a key={x.link || i} {...stagger(i, 0.3)} href={x.link} target="_blank" rel="noreferrer"
+                            className="flex gap-3 items-center p-1.5 rounded-md hover:bg-white/[0.04] border-b border-white/[0.04]">
+                            {x.image && !broken[i] ? (
+                                <img src={x.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => hide(i)}
+                                    className="w-[72px] h-[48px] object-cover rounded shrink-0 border border-white/10" />
+                            ) : (
+                                <div className="w-[72px] h-[48px] rounded shrink-0 border border-white/10 flex items-center justify-center text-slate-600">
+                                    <Newspaper size={16} />
+                                </div>
+                            )}
+                            <div className="min-w-0">
+                                <div className="text-[12px] text-slate-200 leading-snug line-clamp-2">{x.title}</div>
+                                <div className="text-[10px] font-mono text-slate-500 mt-0.5">{x.source} · {x.ago}</div>
+                            </div>
+                        </motion.a>
+                    ))}
+                </div>
+                <div className="mt-3 text-[9px] font-mono text-slate-500">GOOGLE NEWS · DAILY MIRROR · ECONOMYNEXT · NEWSWIRE · BING · LIVE</div>
             </HoloPanel>
         </FlyRow>
     );
@@ -360,9 +406,9 @@ export function ConfirmCard({ request, onResolve }) {
 }
 
 /* ----------------------------------------------------------- STAGE ---- */
-const MAIN_TYPES = ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather'];
+const MAIN_TYPES = ['weather', 'map', 'email_summary', 'email_view', 'computer', 'gods_eye', 'lk_weather', 'lk_news'];
 
-const BEAM_COLOR = { weather: '#22d3ee', map: '#22d3ee', gods_eye: '#fbbf24', lk_weather: '#a78bfa', email_summary: '#f0abfc', email_view: '#f0abfc', computer: '#fbbf24' };
+const BEAM_COLOR = { weather: '#22d3ee', map: '#22d3ee', gods_eye: '#fbbf24', lk_weather: '#a78bfa', lk_news: '#fb7185', email_summary: '#f0abfc', email_view: '#f0abfc', computer: '#fbbf24' };
 
 export default function Stage({ widgets, computer, onDismiss, onOpenInbox, onAsk, onStop, onResume }) {
     const mains = widgets.filter((w) => MAIN_TYPES.includes(w.type));
@@ -401,6 +447,7 @@ export default function Stage({ widgets, computer, onDismiss, onOpenInbox, onAsk
                             {main.type === 'computer' && <ComputerSummon steps={computer.steps} shot={computer.shot} onClose={() => onDismiss(main.id)} onStop={onStop} onResume={onResume} />}
                             {main.type === 'gods_eye' && <GodsEyeSummon widget={main} onClose={() => onDismiss(main.id)} />}
                             {main.type === 'lk_weather' && <LkWeatherSummon widget={main} onClose={() => onDismiss(main.id)} />}
+                            {main.type === 'lk_news' && <LkNewsSummon widget={main} onClose={() => onDismiss(main.id)} />}
                           </BeamProvider>
                           </div>
                         </div>

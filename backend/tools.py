@@ -252,6 +252,17 @@ sri_lanka_weather_tool = {
     "parameters": {"type": "OBJECT", "properties": {}}
 }
 
+sri_lanka_news_tool = {
+    "name": "sri_lanka_news",
+    "description": "Live Sri Lanka news, newest first, with photos shown on screen (Google News, Daily Mirror, EconomyNext, "
+                   "Newswire, Ada Derana and more, refreshed every call). Use for any Sri Lanka news, headlines or updates.",
+    "parameters": {"type": "OBJECT", "properties": {
+        "topic": {"type": "STRING", "description": "Optional subject, e.g. 'cricket', 'economy', 'fuel price', 'Jaffna', 'election'. Empty = top news."},
+        "language": {"type": "STRING", "description": "'en' (default), 'ta' for Tamil news sources, 'si' for Sinhala."},
+        "hours": {"type": "INTEGER", "description": "How far back to look. 3 = breaking/real-time, 24 = today (default), 168 = this week."},
+    }}
+}
+
 omniroute_task_tool = {
     "name": "omniroute_task",
     "description": "BUILD ENGINE: hands a big job to OmniRoute, which routes across every connected AI model with automatic fallback. "
@@ -311,6 +322,7 @@ tools_list = [{
         get_datetime_tool,
         get_system_stats_tool,
         sri_lanka_weather_tool,
+        sri_lanka_news_tool,
         omniroute_task_tool,
         draft_replies_for_all_tool,
         send_reply_drafts_tool,
