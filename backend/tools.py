@@ -333,6 +333,20 @@ search_knowledge_tool = {
     }
 }
 
+create_mission_tool = {
+    "name": "create_mission",
+    "description": "Creates and executes a multi-step mission. Use when the user asks to do several tasks in sequence or in parallel. Each subtask maps to a tool call.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "title": {"type": "STRING", "description": "Short mission title."},
+            "description": {"type": "STRING", "description": "What the mission does overall."},
+            "subtasks": {"type": "ARRAY", "items": {"type": "OBJECT"}, "description": "List of subtask dicts with keys: title, tool_name, args (dict), depends_on (list of subtask titles or ids)."}
+        },
+        "required": ["title", "description", "subtasks"]
+    }
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -368,5 +382,6 @@ tools_list = [{
         save_memory_tool,
         recall_memory_tool,
         search_knowledge_tool,
+        create_mission_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events

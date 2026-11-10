@@ -222,6 +222,18 @@ except Exception as _tc_err:
     training_centre = None
     _TC_AVAILABLE = False
 
+try:
+    from mission_control import MissionEngine
+    mission_engine = MissionEngine()
+    def _on_mission_progress(mission_id, event_type, data):
+        asyncio.create_task(sio.emit('mission_progress', {'mission_id': mission_id, 'event_type': event_type, 'data': data}))
+    mission_engine.on_progress = _on_mission_progress
+    _MISSIONS_AVAILABLE = True
+except Exception as _me_err:
+    print(f'[MISSIONS] Mission engine unavailable: {_me_err}')
+    mission_engine = None
+    _MISSIONS_AVAILABLE = False
+
 
 def _on_wake_word():
     """Called by wake word listener thread → emit socket event to all clients."""
@@ -942,6 +954,49 @@ async def list_datasets(sid, data=None):
         return
     datasets = await asyncio.to_thread(training_centre.list_datasets)
     await sio.emit('datasets_list', {'datasets': datasets}, room=sid)
+
+
+@sio.event
+async def create_mission(sid, data=None):
+    if not mission_engine:
+        await sio.emit('mission_error', {'error': 'Mission engine unavailable'}, room=sid)
+        return
+    data = data or {}
+    mission_id = await asyncio.to_thread(mission_engine.create_mission, data.get('title', 'Untitled'), data.get('description', ''), data.get('subtasks', []))
+    asyncio.create_task(mission_engine.execute_mission(mission_id))
+    await sio.emit('mission_created', {'mission_id': mission_id}, room=sid)
+
+@sio.event
+async def execute_mission(sid, data=None):
+    if not mission_engine: return
+    mission_id = (data or {}).get('mission_id')
+    if mission_id:
+        asyncio.create_task(mission_engine.execute_mission(mission_id))
+
+@sio.event
+async def cancel_mission(sid, data=None):
+    if not mission_engine: return
+    mission_id = (data or {}).get('mission_id')
+    if mission_id:
+        await asyncio.to_thread(mission_engine.cancel_mission, mission_id)
+        await sio.emit('mission_cancelled', {'mission_id': mission_id}, room=sid)
+
+@sio.event
+async def get_missions(sid, data=None):
+    if not mission_engine:
+        await sio.emit('missions_list', {'missions': []}, room=sid)
+        return
+    missions = await asyncio.to_thread(mission_engine.list_missions)
+    await sio.emit('missions_list', {'missions': missions}, room=sid)
+
+@sio.event
+async def get_mission(sid, data=None):
+    if not mission_engine: return
+    mission_id = (data or {}).get('mission_id')
+    if mission_id:
+        m = await asyncio.to_thread(mission_engine.get_mission, mission_id)
+        await sio.emit('mission_detail', {'mission': m}, room=sid)
+
 
 if __name__ == "__main__":
     uvicorn.run(

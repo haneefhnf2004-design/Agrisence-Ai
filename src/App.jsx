@@ -124,6 +124,8 @@ function App() {
     const [feedbackStats, setFeedbackStats] = useState({ total: 0, positive: 0, negative: 0, ratio: 0 });
     const [feedbackList, setFeedbackList] = useState([]);
     const [datasets, setDatasets] = useState([]);
+    const [missions, setMissions] = useState([]);
+    const [missionDetail, setMissionDetail] = useState(null);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -229,6 +231,21 @@ function App() {
         socket.on('feedback_stats', setFeedbackStats);
         socket.on('feedback_list', (d) => setFeedbackList(d.feedback || []));
         socket.on('datasets_list', (d) => setDatasets(d.datasets || []));
+        socket.on('missions_list', (d) => setMissions(d.missions || []));
+        socket.on('mission_progress', (d) => {
+            setMissions(prev => {
+                const idx = prev.findIndex(m => m.id === d.mission_id);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...d.data };
+                    return updated;
+                }
+                return prev;
+            });
+        });
+        socket.on('mission_created', () => socket.emit('get_missions'));
+        socket.on('mission_cancelled', () => socket.emit('get_missions'));
+        socket.on('mission_detail', (d) => setMissionDetail(d.mission));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -264,7 +281,8 @@ function App() {
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
                 'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
                 'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error',
-                'feedback_stats', 'feedback_list', 'datasets_list'].forEach((e) => socket.off(e));
+                'feedback_stats', 'feedback_list', 'datasets_list',
+                'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -484,8 +502,8 @@ function App() {
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); }}
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer]].map(([k, l, I]) => (
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); else if (k === 'missions') socket.emit('get_missions'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -632,6 +650,46 @@ function App() {
                                             >OPEN KNOWLEDGE BASE →</button>
                                         </div>
                                     </div>
+                                </div>
+                            ) : rightTab === 'missions' ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500">MISSION CONTROL</div>
+                                        <button onClick={() => socket.emit('get_missions')} className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider">REFRESH</button>
+                                    </div>
+                                    {missions.length === 0 ? (
+                                        <div className="text-xs text-slate-500">No missions yet. Ask Nexora to run a multi-step task.</div>
+                                    ) : (
+                                        missions.map(m => (
+                                            <div key={m.id} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                                                <div className="flex items-center justify-between gap-2 mb-1">
+                                                    <div className="text-xs text-slate-200 truncate flex-1">{m.title}</div>
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                                                        m.status === 'completed' ? 'border-emerald-400/30 text-emerald-300 bg-emerald-400/5' :
+                                                        m.status === 'running' ? 'border-amber-400/30 text-amber-300 bg-amber-400/5' :
+                                                        m.status === 'failed' ? 'border-rose-400/30 text-rose-300 bg-rose-400/5' :
+                                                        m.status === 'cancelled' ? 'border-slate-400/30 text-slate-400 bg-slate-400/5' :
+                                                        'border-cyan-400/30 text-cyan-300 bg-cyan-400/5'
+                                                    }`}>{m.status?.toUpperCase()}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 truncate mb-2">{m.description}</div>
+                                                {(m.subtasks || []).map((st, i) => (
+                                                    <div key={i} className="flex items-center gap-2 text-[10px] py-0.5">
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                                            st.status === 'done' ? 'bg-emerald-400' :
+                                                            st.status === 'running' ? 'bg-amber-400 animate-pulse' :
+                                                            st.status === 'failed' ? 'bg-rose-400' : 'bg-slate-500'
+                                                        }`} />
+                                                        <span className="text-slate-400 flex-1 truncate">{st.title}</span>
+                                                        <span className="text-slate-600">{st.tool_name}</span>
+                                                    </div>
+                                                ))}
+                                                {['pending', 'running', 'paused'].includes(m.status) && (
+                                                    <button onClick={() => socket.emit('cancel_mission', { mission_id: m.id })} className="mt-2 text-[9px] text-rose-400 hover:text-rose-200 tracking-wider">CANCEL</button>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             ) : (
                                 <div className="space-y-5">

@@ -32,6 +32,12 @@ try:
 except Exception:
     rag_engine = None
 
+try:
+    from mission_control import MissionEngine as _MissionEngine
+    _ada_mission_engine = _MissionEngine()
+except Exception:
+    _ada_mission_engine = None
+
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
@@ -140,8 +146,8 @@ config = types.LiveConnectConfig(
 # Tools handled by AudioLoop._run_nexora_tool, and the ones among them that never need an approval click.
 NEXORA_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task",
                 "draft_replies_for_all", "send_reply_drafts", "show_nexora_window", "save_memory", "recall_memory",
-                "search_knowledge")
-NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory", "search_knowledge")
+                "search_knowledge", "create_mission")
+NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory", "search_knowledge", "create_mission")
 
 pya = pyaudio.PyAudio()
 
@@ -1047,6 +1053,15 @@ class AudioLoop:
                     return "Relevant knowledge:\n" + "\n".join(lines)
                 return "No relevant documents found in the knowledge base."
             return "Knowledge base is not available."
+
+        if name == "create_mission" and _ada_mission_engine:
+            mid = _ada_mission_engine.create_mission(
+                args.get('title', 'Mission'),
+                args.get('description', ''),
+                args.get('subtasks', [])
+            )
+            asyncio.create_task(_ada_mission_engine.execute_mission(mid))
+            return f'Mission created with ID {mid} and execution started.'
 
         return f"Unknown tool {name}."
 
