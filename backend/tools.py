@@ -381,6 +381,12 @@ knowledge_graph_tool = {
     }
 }
 
+run_diagnostics_tool = {
+    "name": "run_diagnostics",
+    "description": "Runs a full system diagnostic: checks API health, database health, backend module health, and analyzes error logs. Use when the user asks why something is broken, or asks for a system check.",
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -419,5 +425,6 @@ tools_list = [{
         create_mission_tool,
         manage_events_tool,
         knowledge_graph_tool,
+        run_diagnostics_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events

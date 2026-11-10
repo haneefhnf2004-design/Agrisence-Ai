@@ -300,12 +300,23 @@ async def _daily_briefing_loop():
         await asyncio.sleep(60)
 
 
+async def _perf_history_loop():
+    while True:
+        try:
+            snap = await asyncio.to_thread(system_monitor.snapshot)
+            await asyncio.to_thread(system_monitor.save_perf_snapshot, snap)
+        except Exception as e:
+            print(f'[PERF] {e}')
+        await asyncio.sleep(60)
+
+
 @app.on_event("startup")
 async def startup_event():
     print("[SERVER] Nexora Email Assistant Backend Starting...")
     asyncio.create_task(focus_engine.run_forever())
     asyncio.create_task(_system_stats_loop())
     asyncio.create_task(_daily_briefing_loop())
+    asyncio.create_task(_perf_history_loop())
     if event_engine: await asyncio.to_thread(event_engine.start)
     if SETTINGS.get("bluey_desktop", True):
         try:
@@ -1099,6 +1110,34 @@ async def search_kg(sid, data=None):
     query = (data or {}).get('query', '')
     results = await asyncio.to_thread(kg_engine.search_graph, query)
     await sio.emit('kg_search_results', {'results': results}, room=sid)
+
+
+try:
+    from diagnostics import DiagnosticsEngine
+    diag_engine = DiagnosticsEngine()
+    _DIAG_AVAILABLE = True
+except Exception as _diag_err:
+    print(f'[DIAG] Diagnostics unavailable: {_diag_err}')
+    diag_engine = None
+    _DIAG_AVAILABLE = False
+
+
+@sio.event
+async def run_diagnostics(sid, data=None):
+    if not diag_engine:
+        await sio.emit('diagnostics_report', {'error': 'Diagnostics unavailable'}, room=sid)
+        return
+    report = await asyncio.to_thread(diag_engine.generate_report)
+    await sio.emit('diagnostics_report', report, room=sid)
+
+@sio.event
+async def get_perf_history(sid, data=None):
+    hours = (data or {}).get('hours', 24)
+    try:
+        history = await asyncio.to_thread(system_monitor.get_perf_history, hours)
+        await sio.emit('perf_history', {'history': history}, room=sid)
+    except Exception as e:
+        await sio.emit('perf_history', {'history': [], 'error': str(e)}, room=sid)
 
 
 if __name__ == "__main__":

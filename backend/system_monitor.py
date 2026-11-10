@@ -109,6 +109,45 @@ def snapshot():
     }
 
 
+import sqlite3 as _sqlite3
+import os as _os
+
+_PERF_DB = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'perf_history.db')
+
+def _init_perf_db():
+    with _sqlite3.connect(_PERF_DB) as con:
+        con.execute('''CREATE TABLE IF NOT EXISTS perf_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            cpu_percent REAL,
+            ram_percent REAL,
+            disk_percent REAL,
+            battery_percent REAL
+        )''')
+
+def save_perf_snapshot(snap: dict):
+    _init_perf_db()
+    import datetime
+    ts = datetime.datetime.now().isoformat()
+    cpu = snap.get('cpu', {}).get('percent', 0) if isinstance(snap.get('cpu'), dict) else 0
+    ram = snap.get('ram', {}).get('percent', 0) if isinstance(snap.get('ram'), dict) else 0
+    disk = snap.get('disk', {}).get('percent', 0) if isinstance(snap.get('disk'), dict) else 0
+    battery = snap.get('battery', {}).get('percent', 0) if isinstance(snap.get('battery'), dict) else 0
+    with _sqlite3.connect(_PERF_DB) as con:
+        con.execute('INSERT INTO perf_history (timestamp, cpu_percent, ram_percent, disk_percent, battery_percent) VALUES (?,?,?,?,?)',
+                    (ts, cpu, ram, disk, battery))
+        # Keep only last 1440 rows (24h at 1/min)
+        con.execute('DELETE FROM perf_history WHERE id NOT IN (SELECT id FROM perf_history ORDER BY id DESC LIMIT 1440)')
+
+def get_perf_history(hours=24):
+    _init_perf_db()
+    import datetime
+    cutoff = (datetime.datetime.now() - datetime.timedelta(hours=hours)).isoformat()
+    with _sqlite3.connect(_PERF_DB) as con:
+        rows = con.execute('SELECT timestamp, cpu_percent, ram_percent, disk_percent, battery_percent FROM perf_history WHERE timestamp > ? ORDER BY timestamp ASC', (cutoff,)).fetchall()
+    return [{'timestamp': r[0], 'cpu': r[1], 'ram': r[2], 'disk': r[3], 'battery': r[4]} for r in rows]
+
+
 def spoken_summary(s=None):
     s = s or snapshot()
     parts = [f"CPU {s['cpu']['percent']:.0f}%", f"RAM {s['ram']['percent']:.0f}% ({s['ram']['used_gb']} of {s['ram']['total_gb']} GB)",

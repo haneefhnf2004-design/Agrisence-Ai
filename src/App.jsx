@@ -131,6 +131,9 @@ function App() {
     const [kgData, setKgData] = useState({ entities: [], stats: { node_count: 0, edge_count: 0 } });
     const [kgSearch, setKgSearch] = useState('');
     const [kgSearchResults, setKgSearchResults] = useState([]);
+    const [diagReport, setDiagReport] = useState(null);
+    const [diagRunning, setDiagRunning] = useState(false);
+    const [perfHistory, setPerfHistory] = useState([]);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -258,6 +261,8 @@ function App() {
         });
         socket.on('kg_data', setKgData);
         socket.on('kg_search_results', (d) => setKgSearchResults(d.results || []));
+        socket.on('diagnostics_report', (d) => { setDiagReport(d); setDiagRunning(false); });
+        socket.on('perf_history', (d) => setPerfHistory(d.history || []));
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -296,7 +301,8 @@ function App() {
                 'feedback_stats', 'feedback_list', 'datasets_list',
                 'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail',
                 'event_rules_list', 'event_history', 'event_fired',
-                'kg_data', 'kg_search_results'].forEach((e) => socket.off(e));
+                'kg_data', 'kg_search_results',
+                'diagnostics_report', 'perf_history'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -516,8 +522,8 @@ function App() {
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer], ['events', 'EVENTS', Activity]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') { socket.emit('get_memories'); socket.emit('get_knowledge_graph'); } else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); }}
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer], ['events', 'EVENTS', Activity], ['diag', 'DIAG', Activity]].map(([k, l, I]) => (
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') { socket.emit('get_memories'); socket.emit('get_knowledge_graph'); } else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); else if (k === 'diag') socket.emit('get_perf_history'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -793,6 +799,68 @@ function App() {
                                                     <span className="text-cyan-400/70">{h.rule_name}</span> · {new Date(h.fired_at).toLocaleTimeString()} · {h.action_type}
                                                 </div>
                                             ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : rightTab === 'diag' ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500">SYSTEM DIAGNOSTICS</div>
+                                        <button
+                                            onClick={() => { setDiagRunning(true); socket.emit('run_diagnostics'); }}
+                                            disabled={diagRunning}
+                                            className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider disabled:opacity-50">
+                                            {diagRunning ? 'RUNNING…' : 'RUN'}
+                                        </button>
+                                    </div>
+                                    {diagReport && (
+                                        <div className="space-y-3">
+                                            {/* API Health */}
+                                            <div>
+                                                <div className="text-[9px] text-slate-600 mb-1">API HEALTH</div>
+                                                {Object.entries(diagReport.api_health || {}).map(([k, v]) => (
+                                                    <div key={k} className="flex items-center justify-between text-[10px] py-0.5">
+                                                        <span className="text-slate-400">{k.replace(/_/g,' ')}</span>
+                                                        <span className={v ? 'text-emerald-400' : 'text-rose-400'}>{v ? 'OK' : 'FAIL'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {/* Backend Health */}
+                                            <div>
+                                                <div className="text-[9px] text-slate-600 mb-1">MODULES</div>
+                                                {Object.entries(diagReport.backend_health || {}).map(([k, v]) => (
+                                                    <div key={k} className="flex items-center justify-between text-[10px] py-0.5">
+                                                        <span className="text-slate-400 truncate flex-1">{k}</span>
+                                                        <span className={v?.ok ? 'text-emerald-400' : 'text-rose-400'}>{v?.ok ? 'OK' : 'ERR'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {/* Recommendations */}
+                                            {(diagReport.recommendations || []).length > 0 && (
+                                                <div>
+                                                    <div className="text-[9px] text-slate-600 mb-1">RECOMMENDATIONS</div>
+                                                    {diagReport.recommendations.map((r, i) => (
+                                                        <div key={i} className="text-[10px] text-amber-300/80 py-0.5">· {r}</div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {!diagReport && !diagRunning && (
+                                        <div className="text-xs text-slate-500">Click RUN to check all systems.</div>
+                                    )}
+                                    {/* Performance sparkline (numbers) */}
+                                    {perfHistory.length > 0 && (
+                                        <div className="mt-3">
+                                            <div className="text-[9px] text-slate-600 mb-1">PERFORMANCE (LAST {perfHistory.length} MIN)</div>
+                                            <div className="flex gap-2 text-[10px]">
+                                                <span className="text-slate-500">CPU:</span>
+                                                <span className="text-cyan-300">{Math.round(perfHistory[perfHistory.length-1]?.cpu || 0)}%</span>
+                                                <span className="text-slate-500">RAM:</span>
+                                                <span className="text-fuchsia-300">{Math.round(perfHistory[perfHistory.length-1]?.ram || 0)}%</span>
+                                                <span className="text-slate-500">avg CPU:</span>
+                                                <span className="text-cyan-300">{Math.round(perfHistory.reduce((a,b) => a + (b.cpu||0), 0) / perfHistory.length)}%</span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
