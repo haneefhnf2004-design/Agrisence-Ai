@@ -26,3 +26,7 @@ torch
 SpeechRecognition
 PyMuPDF
 python-docx
+
+# Event-driven automation
+watchdog
+schedule

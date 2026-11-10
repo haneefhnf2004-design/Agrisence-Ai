@@ -234,6 +234,18 @@ except Exception as _me_err:
     mission_engine = None
     _MISSIONS_AVAILABLE = False
 
+try:
+    from event_engine import EventEngine
+    event_engine = EventEngine()
+    def _on_event_fired(rule_info):
+        asyncio.create_task(sio.emit('event_fired', rule_info))
+    event_engine.on_event = _on_event_fired
+    _EVENTS_AVAILABLE = True
+except Exception as _ee_err:
+    print(f'[EVENTS] Event engine unavailable: {_ee_err}')
+    event_engine = None
+    _EVENTS_AVAILABLE = False
+
 
 def _on_wake_word():
     """Called by wake word listener thread → emit socket event to all clients."""
@@ -285,6 +297,7 @@ async def startup_event():
     asyncio.create_task(focus_engine.run_forever())
     asyncio.create_task(_system_stats_loop())
     asyncio.create_task(_daily_briefing_loop())
+    if event_engine: await asyncio.to_thread(event_engine.start)
     if SETTINGS.get("bluey_desktop", True):
         try:
             import bluey_buddy
@@ -996,6 +1009,49 @@ async def get_mission(sid, data=None):
     if mission_id:
         m = await asyncio.to_thread(mission_engine.get_mission, mission_id)
         await sio.emit('mission_detail', {'mission': m}, room=sid)
+
+
+@sio.event
+async def add_event_rule(sid, data=None):
+    if not event_engine: return
+    rule_id = await asyncio.to_thread(event_engine.add_rule, data or {})
+    rules = await asyncio.to_thread(event_engine.list_rules)
+    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+
+@sio.event
+async def remove_event_rule(sid, data=None):
+    if not event_engine: return
+    await asyncio.to_thread(event_engine.remove_rule, (data or {}).get('rule_id'))
+    rules = await asyncio.to_thread(event_engine.list_rules)
+    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+
+@sio.event
+async def toggle_event_rule(sid, data=None):
+    if not event_engine: return
+    data = data or {}
+    if data.get('enabled'):
+        await asyncio.to_thread(event_engine.enable_rule, data.get('rule_id'))
+    else:
+        await asyncio.to_thread(event_engine.disable_rule, data.get('rule_id'))
+    rules = await asyncio.to_thread(event_engine.list_rules)
+    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+
+@sio.event
+async def list_event_rules(sid, data=None):
+    if not event_engine:
+        await sio.emit('event_rules_list', {'rules': []}, room=sid)
+        return
+    rules = await asyncio.to_thread(event_engine.list_rules)
+    history = await asyncio.to_thread(event_engine.get_history)
+    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+    await sio.emit('event_history', {'history': history}, room=sid)
+
+@sio.event
+async def fire_event_rule(sid, data=None):
+    if not event_engine: return
+    rule_id = (data or {}).get('rule_id')
+    if rule_id:
+        await asyncio.to_thread(event_engine.fire_rule, rule_id)
 
 
 if __name__ == "__main__":

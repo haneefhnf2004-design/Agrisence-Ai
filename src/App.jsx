@@ -126,6 +126,8 @@ function App() {
     const [datasets, setDatasets] = useState([]);
     const [missions, setMissions] = useState([]);
     const [missionDetail, setMissionDetail] = useState(null);
+    const [eventRules, setEventRules] = useState([]);
+    const [eventHistory, setEventHistory] = useState([]);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -246,6 +248,11 @@ function App() {
         socket.on('mission_created', () => socket.emit('get_missions'));
         socket.on('mission_cancelled', () => socket.emit('get_missions'));
         socket.on('mission_detail', (d) => setMissionDetail(d.mission));
+        socket.on('event_rules_list', (d) => setEventRules(d.rules || []));
+        socket.on('event_history', (d) => setEventHistory(d.history || []));
+        socket.on('event_fired', (d) => {
+            setEventHistory(prev => [d, ...prev].slice(0, 20));
+        });
         socket.on('focus_ended', (d) => {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
@@ -282,7 +289,8 @@ function App() {
                 'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
                 'memories_list', 'memory_deleted', 'wake_word_detected', 'documents_list', 'rag_error',
                 'feedback_stats', 'feedback_list', 'datasets_list',
-                'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail'].forEach((e) => socket.off(e));
+                'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail',
+                'event_rules_list', 'event_history', 'event_fired'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -502,8 +510,8 @@ function App() {
                     <motion.aside animate={{ width: summonLayout ? 0 : 320, opacity: summonLayout ? 0 : 1, x: summonLayout ? 60 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 20 }} className="shrink-0 flex flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm overflow-hidden"><div className="w-[320px] h-full flex flex-col">
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
-                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); else if (k === 'missions') socket.emit('get_missions'); }}
+                            {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer], ['events', 'EVENTS', Activity]].map(([k, l, I]) => (
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') socket.emit('get_memories'); else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -689,6 +697,46 @@ function App() {
                                                 )}
                                             </div>
                                         ))
+                                    )}
+                                </div>
+                            ) : rightTab === 'events' ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-[10px] tracking-[0.25em] text-slate-500">EVENT RULES</div>
+                                        <button onClick={() => socket.emit('list_event_rules')} className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider">REFRESH</button>
+                                    </div>
+                                    {eventRules.length === 0 ? (
+                                        <div className="text-xs text-slate-500">No rules yet. Ask Nexora to watch a folder or schedule a task.</div>
+                                    ) : (
+                                        eventRules.map(r => (
+                                            <div key={r.id} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-xs text-slate-200 truncate flex-1">{r.name}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => socket.emit('toggle_event_rule', { rule_id: r.id, enabled: !r.enabled })}
+                                                            className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                                                                r.enabled ? 'border-emerald-400/30 text-emerald-300' : 'border-slate-400/30 text-slate-500'
+                                                            }`}>{r.enabled ? 'ON' : 'OFF'}</button>
+                                                        <button
+                                                            onClick={() => socket.emit('fire_event_rule', { rule_id: r.id })}
+                                                            className="text-[9px] text-cyan-400 hover:text-cyan-200">FIRE</button>
+                                                    </div>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 mt-0.5">{r.trigger_type} → {r.action_type}</div>
+                                                {r.last_fired && <div className="text-[9px] text-slate-600 mt-0.5">Last: {new Date(r.last_fired).toLocaleString()}</div>}
+                                            </div>
+                                        ))
+                                    )}
+                                    {eventHistory.length > 0 && (
+                                        <div>
+                                            <div className="text-[10px] tracking-[0.25em] text-slate-500 mb-2 mt-4">RECENT FIRES</div>
+                                            {eventHistory.slice(0, 5).map((h, i) => (
+                                                <div key={i} className="text-[10px] text-slate-500 py-0.5 truncate">
+                                                    <span className="text-cyan-400/70">{h.rule_name}</span> · {new Date(h.fired_at).toLocaleTimeString()} · {h.action_type}
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             ) : (

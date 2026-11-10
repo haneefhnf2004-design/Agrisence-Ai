@@ -347,6 +347,24 @@ create_mission_tool = {
     }
 }
 
+manage_events_tool = {
+    "name": "manage_events",
+    "description": "Creates or lists event automation rules. Rules fire on file changes, schedules, or app health. Use when the user asks to automate something or watch for a condition.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "enum": ["add", "list", "fire"], "description": "add: create a new rule, list: show all rules, fire: manually trigger a rule."},
+            "rule_name": {"type": "STRING", "description": "Name for the new rule (required for add)."},
+            "trigger_type": {"type": "STRING", "enum": ["schedule", "file_change", "app_health", "manual"]},
+            "trigger_config": {"type": "STRING", "description": "JSON string with trigger config (interval_minutes, daily_at, folder_path, process_name, condition)."},
+            "action_type": {"type": "STRING", "enum": ["notify", "run_tool"], "description": "What to do when the rule fires."},
+            "action_config": {"type": "STRING", "description": "JSON string with action config (message for notify, tool_name + args for run_tool)."},
+            "rule_id": {"type": "STRING", "description": "Rule id for fire action."}
+        },
+        "required": ["action"]
+    }
+}
+
 tools_list = [{
     "function_declarations": [
         read_emails_tool,
@@ -383,5 +401,6 @@ tools_list = [{
         recall_memory_tool,
         search_knowledge_tool,
         create_mission_tool,
+        manage_events_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events
