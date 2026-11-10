@@ -25,6 +25,7 @@ const SettingsWindow = ({
     onClose
 }) => {
     const [permissions, setPermissions] = useState({});
+    const [wakeWordEnabled, setWakeWordEnabled] = useState(true);
 
     const [emailConfig, setEmailConfig] = useState({
         email_address: '',
@@ -43,6 +44,7 @@ const SettingsWindow = ({
             if (settings.email_config) {
                 setEmailConfig(settings.email_config);
             }
+            if (typeof settings.wake_word_enabled === 'boolean') setWakeWordEnabled(settings.wake_word_enabled);
         };
 
         if (socket) {
@@ -177,6 +179,27 @@ const SettingsWindow = ({
                                     {device.label || `Speaker ${i + 1}`}
                                 </button>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* Wake Word */}
+                    <div>
+                        <h3 className="text-xs font-bold tracking-widest text-cyan-400/80 mb-3">WAKE WORD</h3>
+                        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 border border-white/10">
+                            <div>
+                                <div className="text-xs text-slate-300">"Hey NEXORA" detection</div>
+                                <div className="text-[10px] text-slate-500 mt-0.5">Wakes Nexora when window is hidden</div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    const newVal = !wakeWordEnabled;
+                                    setWakeWordEnabled(newVal);
+                                    socket.emit('set_wake_word', { enabled: newVal });
+                                }}
+                                className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${wakeWordEnabled ? 'bg-cyan-500/80' : 'bg-slate-600/50'}`}
+                            >
+                                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-200 ${wakeWordEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </button>
                         </div>
                     </div>
                 </div>

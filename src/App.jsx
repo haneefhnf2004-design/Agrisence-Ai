@@ -138,6 +138,7 @@ function App() {
     const micRaf = useRef(null);
     const micSrc = useRef(null);
     const autoStarted = useRef(false);
+    const isConnectedRef = useRef(isConnected);
 
     const addMessage = (sender, text) => setMessages((p) => [...p, { sender, text, time: new Date().toLocaleTimeString() }]);
     const pushWidget = (w) => {
@@ -221,6 +222,17 @@ function App() {
             addMessage('System', `Focus session ended (${d.reason}).`);
             socket.emit('focus_history');
         });
+        socket.on('wake_word_detected', () => {
+            // Show window via IPC
+            ipcRenderer?.send('window-show');
+            // Auto-start voice if not already running
+            if (!isConnectedRef.current) {
+                const idx = micDevices.findIndex((d) => d.deviceId === selectedMicId);
+                socket.emit('start_audio', { device_index: idx >= 0 ? idx : null });
+                setIsConnected(true);
+                setIsMuted(false);
+            }
+        });
 
         navigator.mediaDevices?.getUserMedia({ audio: true })
             .then((s) => { s.getTracks().forEach((t) => t.stop()); return navigator.mediaDevices.enumerateDevices(); })
@@ -240,7 +252,7 @@ function App() {
             clearInterval(t);
             ['connect', 'disconnect', 'status', 'audio_data', 'error', 'transcription', 'tool_confirmation_request',
                 'widget_update', 'focus_state', 'focus_history', 'focus_ended', 'bluey_state', 'system_stats',
-                'memories_list', 'memory_deleted'].forEach((e) => socket.off(e));
+                'memories_list', 'memory_deleted', 'wake_word_detected'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -257,6 +269,7 @@ function App() {
 
     useEffect(() => { if (selectedMicId) localStorage.setItem('selectedMicId', selectedMicId); }, [selectedMicId]);
     useEffect(() => { if (selectedSpeakerId) localStorage.setItem('selectedSpeakerId', selectedSpeakerId); }, [selectedSpeakerId]);
+    useEffect(() => { isConnectedRef.current = isConnected; }, [isConnected]);
     useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
     // Mic level for the orb.

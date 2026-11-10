@@ -198,6 +198,23 @@ import lk_weather
 import lk_news
 from memory import memory as memory_engine
 
+try:
+    from wake_word import wake_listener
+    _WAKE_AVAILABLE = True
+except Exception as _wake_err:
+    print(f"[WAKE] Wake word listener unavailable: {_wake_err}")
+    wake_listener = None
+    _WAKE_AVAILABLE = False
+
+
+def _on_wake_word():
+    """Called by wake word listener thread → emit socket event to all clients."""
+    print("[WAKE] Wake word detected!")
+    asyncio.run_coroutine_threadsafe(
+        sio.emit('wake_word_detected', {'phrase': 'hey nexora'}),
+        asyncio.get_event_loop()
+    )
+
 
 async def _system_stats_loop():
     """Live hardware + process list to the UI every 2 s, only while a window is connected."""
@@ -246,6 +263,10 @@ async def startup_event():
             await asyncio.to_thread(bluey_buddy.restart)   # fresh Bluey with this run's token
         except Exception as e:
             print(f"[BLUEY] start failed: {e}")
+    if wake_listener and SETTINGS.get('wake_word_enabled', True):
+        wake_listener.on_wake = _on_wake_word
+        wake_listener.start()
+        print("[WAKE] Wake word listener started.")
 
 @app.get("/status")
 async def status():
@@ -385,6 +406,9 @@ async def start_audio(sid, data=None):
         loop_task.add_done_callback(handle_loop_exit)
 
         print("Emitting 'Nexora Started'")
+        if wake_listener and wake_listener.running:
+            wake_listener.stop()
+            print("[WAKE] Wake word listener paused (voice active).")
         await sio.emit('status', {'msg': 'Nexora Started'})
 
         email_config = SETTINGS.get("email_config", {})
@@ -411,7 +435,23 @@ async def stop_audio(sid, data=None):
             loop_task.cancel()
         audio_loop = None
         loop_task = None
+        if wake_listener and SETTINGS.get('wake_word_enabled', True) and not wake_listener.running:
+            wake_listener.on_wake = _on_wake_word
+            wake_listener.start()
+            print("[WAKE] Wake word listener resumed.")
         await sio.emit('status', {'msg': 'Nexora Stopped'})
+
+@sio.event
+async def set_wake_word(sid, data=None):
+    enabled = bool((data or {}).get('enabled', True))
+    SETTINGS['wake_word_enabled'] = enabled
+    save_settings()
+    if enabled and wake_listener and not wake_listener.running:
+        wake_listener.on_wake = _on_wake_word
+        wake_listener.start()
+    elif not enabled and wake_listener and wake_listener.running:
+        wake_listener.stop()
+    await sio.emit('settings_updated', {'settings': public_settings()}, room=sid)
 
 @sio.event
 async def toggle_mute(sid, data=None):
