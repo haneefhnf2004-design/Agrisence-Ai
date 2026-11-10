@@ -127,7 +127,12 @@ def main():
 
     st = {"target": None, "label": "", "return_at": 0, "say": "", "say_until": 0, "mood": "happy",
           "blink": 0, "bob": 0.0, "offset": 0, "tasks": [], "caption": "", "caption_at": 0,
-          "working_until": 0, "done_at": 0, "asking": False, "hello": time.time()}
+          "working_until": 0, "done_at": 0, "asking": False, "hello": time.time(),
+          "cap_scroll": 0, "cap_max": 0, "cap_hold": 0, "cap_bar": None}
+    import tkinter.font as tkfont
+    CAP_FONT = tkfont.Font(family="Segoe UI", size=9, slant="italic")
+    SAY_FONT = tkfont.Font(family="Segoe UI", size=10, weight="bold")
+    CAP_LINES, CAP_LH = 4, 16           # reply lines visible in the card; the rest scrolls
 
     entry = tk.Entry(root, font=("Segoe UI", 11), bg="#0a1238", fg="white", insertbackground="white",
                      relief="flat", highlightthickness=2, highlightcolor="#5b7bff", highlightbackground="#5b7bff")
@@ -206,6 +211,23 @@ def main():
         if math.hypot(e.x - BX, e.y - (BY + math.sin(st["bob"]) * 4)) <= R + 8:
             open_ask()
 
+    def scroll_caption(lines):
+        """Positive = older text. Keeps the card on screen while the user reads."""
+        st["cap_scroll"] = max(0, min(st["cap_max"], st["cap_scroll"] + lines))
+        st["cap_hold"] = time.time() + 20
+
+    def on_wheel(e):
+        if HUD_X <= e.x <= HUD_X + HUD_W and st["cap_max"]:
+            scroll_caption(1 if e.delta > 0 else -1)
+
+    def on_click(e, _bluey_click=on_click):
+        bar = st["cap_bar"]  # (x0, top, x1, bottom, thumb_top, thumb_bottom) of the caption scrollbar
+        if bar and bar[0] - 6 <= e.x <= bar[2] + 6 and bar[1] <= e.y <= bar[3]:
+            scroll_caption(CAP_LINES - 1 if e.y < bar[4] else -(CAP_LINES - 1))
+            return
+        _bluey_click(e)
+
+    c.bind("<MouseWheel>", on_wheel)
     c.bind("<Button-1>", on_click)
     c.bind("<Double-Button-1>", restore_apa)
 
@@ -213,14 +235,25 @@ def main():
         st["say"], st["mood"], st["say_until"] = text[:160], mood, time.time() + seconds
 
     # ---------------- drawing ----------------
-    def wrap_lines(text, width_chars):
-        words, lines, cur = text.split(), [], ""
-        for w_ in words:
-            if len(cur) + len(w_) + 1 > width_chars:
+    def wrap_px(text, font, max_px):
+        """Wrap by real pixel width (Tamil/Sinhala/Telugu glyphs are much wider than Latin)."""
+        lines, cur = [], ""
+        for w_ in text.split():
+            while font.measure(w_) > max_px:  # one very long word: break it by characters
+                k = len(w_)
+                while k > 1 and font.measure(w_[:k]) > max_px:
+                    k -= 1
+                if cur:
+                    lines.append(cur)
+                    cur = ""
+                lines.append(w_[:k])
+                w_ = w_[k:]
+            trial = f"{cur} {w_}".strip()
+            if cur and font.measure(trial) > max_px:
                 lines.append(cur)
                 cur = w_
             else:
-                cur = f"{cur} {w_}".strip()
+                cur = trial
         if cur:
             lines.append(cur)
         return lines
@@ -229,13 +262,18 @@ def main():
         now = time.time()
         working = now < st["working_until"] or any(t["state"] == "running" for t in st["tasks"][-4:])
         recent = [t for t in st["tasks"] if now - t["t"] < 40][-4:]
-        caption = st["caption"] if now - st["caption_at"] < 12 else ""
+        caption = st["caption"] if now - st["caption_at"] < 12 or now < st["cap_hold"] else ""
         text = st["say"] if now < st["say_until"] else st["label"]
+        cap_lines = wrap_px(f"“{caption.strip()}”", CAP_FONT, HUD_W - 44) if caption else []
+        st["cap_max"] = max(0, len(cap_lines) - CAP_LINES)
+        st["cap_scroll"] = min(st["cap_scroll"], st["cap_max"])
+        st["cap_bar"] = None
         if not (working or recent or caption or text):
             return
         y = HUD_Y
-        rows = len(recent) + (2 if caption else 0) + (len(wrap_lines(text, 40)) if text else 0)
-        h = 34 + rows * 18 + (8 if caption or text else 0)
+        cap_h = min(len(cap_lines), CAP_LINES) * CAP_LH + 8 if cap_lines else 0
+        rows = len(recent) + (len(wrap_px(text, SAY_FONT, HUD_W - 28)) if text else 0)
+        h = 34 + rows * 18 + cap_h + (8 if caption or text else 0)
         c.create_rectangle(HUD_X, y, HUD_X + HUD_W, y + h, fill="#030b18", outline="#22d3ee", width=1)
         for (x0, y0, dx, dy) in ((HUD_X, y, 1, 1), (HUD_X + HUD_W, y, -1, 1), (HUD_X, y + h, 1, -1), (HUD_X + HUD_W, y + h, -1, -1)):
             c.create_line(x0, y0, x0 + 12 * dx, y0, fill="#67e8f9", width=2)
@@ -255,13 +293,26 @@ def main():
             c.create_text(HUD_X + 30, yy, anchor="w", fill="#e2e8f0", font=("Segoe UI", 9),
                           text=(t["label"] + (f" · {t['detail']}" if t.get("detail") else ""))[:46])
             yy += 18
-        if caption:
-            c.create_text(HUD_X + 14, yy + 4, anchor="nw", fill="#67e8f9", font=("Segoe UI", 9, "italic"),
-                          width=HUD_W - 26, text=f"“{caption[-110:]}”")
-            yy += 36
+        if cap_lines:
+            # Newest lines by default; mouse wheel / scrollbar clicks move back through the reply.
+            end = len(cap_lines) - st["cap_scroll"]
+            shown = cap_lines[max(0, end - CAP_LINES):end]
+            top = yy + 4
+            for i, line in enumerate(shown):
+                c.create_text(HUD_X + 14, top + i * CAP_LH, anchor="nw", fill="#67e8f9", font=CAP_FONT, text=line)
+            if st["cap_max"]:
+                x0, x1, bottom = HUD_X + HUD_W - 12, HUD_X + HUD_W - 8, top + len(shown) * CAP_LH
+                c.create_rectangle(x0, top, x1, bottom, fill="#0f2a3d", outline="")
+                span = bottom - top
+                thumb = max(10, span * CAP_LINES / len(cap_lines))
+                frac = 1 - st["cap_scroll"] / st["cap_max"]  # 1 = at the newest text
+                t0 = top + (span - thumb) * frac
+                c.create_rectangle(x0, t0, x1, t0 + thumb, fill="#67e8f9", outline="")
+                st["cap_bar"] = (x0, top, x1, bottom, t0, t0 + thumb)
+            yy += cap_h
         if text:
-            for line in wrap_lines(text, 40):
-                c.create_text(HUD_X + 14, yy + 2, anchor="nw", fill="white", font=("Segoe UI", 10, "bold"), text=line)
+            for line in wrap_px(text, SAY_FONT, HUD_W - 28):
+                c.create_text(HUD_X + 14, yy + 2, anchor="nw", fill="white", font=SAY_FONT, text=line)
                 yy += 18
         # little connector from the card to Bluey
         c.create_line(HUD_X + HUD_W, y + h - 10, BX - R + 6, BY - 16, fill="#22d3ee", dash=(2, 4))
@@ -367,7 +418,10 @@ def main():
                 if cmd.get("state") == "running":
                     st["mood"] = "focus"
             elif a == "caption":
-                st["caption"] = (st["caption"] + cmd.get("text", ""))[-300:] if time.time() - st["caption_at"] < 4 else cmd.get("text", "")
+                if time.time() - st["caption_at"] < 4:
+                    st["caption"] = (st["caption"] + cmd.get("text", ""))[-2000:]  # whole reply, scrollable
+                else:
+                    st["caption"], st["cap_scroll"] = cmd.get("text", ""), 0
                 st["caption_at"] = time.time()
             elif a == "quit":
                 root.destroy()
