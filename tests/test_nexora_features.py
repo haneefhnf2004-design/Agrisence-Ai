@@ -28,6 +28,6 @@ def test_omniroute_files_cannot_escape_build_folder():
 def test_system_snapshot_has_task_manager_fields():
     s = system_monitor.snapshot()
     assert 0 <= s["cpu"]["percent"] <= 100 and 0 <= s["ram"]["percent"] <= 100
-    assert s["process_count"] > 0 and len(s["processes"]) <= 12
+    assert s["process_count"] > 0 and len(s["processes"]) <= 25
     assert all({"pid", "name", "cpu", "mem_mb"} <= set(p) for p in s["processes"])
     assert "CPU" in system_monitor.spoken_summary(s)

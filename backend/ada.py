@@ -50,6 +50,20 @@ SPEECH_RMS_THRESHOLD = 400
 SPEECH_HANGOVER_CHUNKS = 8  # ~0.5s grace after speech stops so words aren't clipped
 
 
+KEEPALIVE_SECONDS = 5.0   # Gemini closes a Live session that hears nothing ("client inactivity")
+SILENT_CHUNK = b"\x00\x00" * 1600  # 100 ms of 16 kHz silence
+PLAYBACK_TAIL = 0.35      # the speaker's own buffer still plays this long after the last write
+
+
+def _norm_device_name(name):
+    """Lower-case letters/digits only, after undoing Windows' mangling of names like 'Intel®' -> 'IntelÂ®'."""
+    try:
+        name = name.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
 def _chunk_rms(data):
     import array
     try:
@@ -189,9 +203,13 @@ class AudioLoop:
         self._is_speaking = False
         self._silence_start_time = None
 
+        # Nexora counts as speaking while reply audio is arriving, queued, or still in the speaker,
+        # so the mic never picks up its own voice and cuts the reply off.
         self._is_model_speaking = False
-        self._model_silence_start = None
-        self.MODEL_SPEAKING_TIMEOUT = 1.5
+        self._last_audio_rx = 0.0
+        self._play_busy_until = 0.0
+        self._playback_q = None
+        self._resume_handle = None  # lets a reconnect continue the same conversation
 
         self.signals = ActivitySignals()
         self.focus = None  # FocusEngine, attached by server.py
@@ -209,6 +227,8 @@ class AudioLoop:
 
     def set_paused(self, paused):
         self.paused = paused
+        if paused:
+            self.signals.mic_open = False  # muting mid-sentence must not leave "user is speaking" stuck on
 
     async def send_text(self, text):
         if self.session:
@@ -230,36 +250,49 @@ class AudioLoop:
             print(f"[ADA DEBUG] [WARN] Confirmation Request {request_id} not found in pending dict.")
 
     def clear_audio_queue(self):
-        try:
-            count = 0
-            while not self.audio_in_queue.empty():
-                self.audio_in_queue.get_nowait()
-                count += 1
-            if count > 0:
-                print(f"[ADA DEBUG] [AUDIO] Cleared {count} chunks from playback queue due to interruption.")
-        except Exception as e:
-            print(f"[ADA DEBUG] [ERR] Failed to clear audio queue: {e}")
+        """Stop Nexora's voice now: drop audio waiting in both queues (the speaker thread's one too)."""
+        count = 0
+        for q in (self.audio_in_queue, self._playback_q):
+            if q is None:
+                continue
+            try:
+                while True:
+                    q.get_nowait()
+                    count += 1
+            except Exception:  # asyncio.QueueEmpty / queue.Empty
+                pass
+        self._play_busy_until = 0.0
+        self._last_audio_rx = 0.0
+        self._is_model_speaking = False
+        if count > 0:
+            print(f"[ADA DEBUG] [AUDIO] Cleared {count} chunks from playback due to interruption.")
 
     async def send_realtime(self):
         while True:
-            msg = await self.out_queue.get()
+            try:
+                msg = await asyncio.wait_for(self.out_queue.get(), timeout=KEEPALIVE_SECONDS)
+            except asyncio.TimeoutError:
+                # Nothing to send (silence, mute, or Nexora talking): send a little silence so
+                # Gemini doesn't close the session for inactivity.
+                await self.session.send_realtime_input(audio={"data": SILENT_CHUNK, "mime_type": "audio/pcm;rate=16000"})
+                continue
             if msg.get("end"):
                 # Tell Gemini the mic went quiet so it answers right away instead of waiting for more audio.
                 await self.session.send_realtime_input(audio_stream_end=True)
             else:
                 await self.session.send_realtime_input(audio=msg)
 
+    def _model_audio_active(self):
+        now = time.monotonic()
+        queued = (self.audio_in_queue is not None and not self.audio_in_queue.empty()) or \
+                 (self._playback_q is not None and not self._playback_q.empty())
+        return queued or now - self._last_audio_rx < 0.5 or now < self._play_busy_until
+
     async def monitor_model_speaking(self):
         while not self.stop_event.is_set():
-            if self._is_model_speaking:
-                now = time.time()
-                if self._model_silence_start is None:
-                    self._model_silence_start = now
-                elif now - self._model_silence_start > self.MODEL_SPEAKING_TIMEOUT:
-                    self._is_model_speaking = False
-                    self._model_silence_start = None
+            self._is_model_speaking = self._model_audio_active()
             self.signals.model_speaking = self._is_model_speaking
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
     async def listen_audio(self):
         mic_info = pya.get_default_input_device_info()
@@ -273,13 +306,19 @@ class AudioLoop:
             print(f"[ADA] Attempting to find input device matching: '{self.input_device_name}'")
             count = pya.get_device_count()
             best_match = None
+            want = _norm_device_name(self.input_device_name)
 
-            # Windows lists one mic once per host API (MME, DirectSound, WASAPI, WDM-KS).
-            # WASAPI/WDM-KS copies often reject 16 kHz, so take the first copy that accepts it.
+            # Windows lists one mic once per host API (MME, DirectSound, WASAPI, WDM-KS). Names can come back
+            # mangled ('IntelÂ®') and MME cuts them at 31 characters, so compare normalised names and accept a
+            # cut-off prefix. WASAPI/WDM-KS copies often reject 16 kHz, so take the first copy that accepts it.
+            def _matches(dev_name):
+                have = _norm_device_name(dev_name)
+                return bool(want) and (want in have or (len(have) >= 12 and want.startswith(have)))
+
             for i in range(count):
                 dev_info = pya.get_device_info_by_index(i)
                 dev_name = dev_info.get('name', '')
-                if dev_info.get('maxInputChannels', 0) > 0 and self.input_device_name.lower() in dev_name.lower():
+                if dev_info.get('maxInputChannels', 0) > 0 and _matches(dev_name):
                     try:
                         pya.is_format_supported(SEND_SAMPLE_RATE, input_device=i, input_channels=CHANNELS, input_format=FORMAT)
                     except ValueError:
@@ -317,6 +356,17 @@ class AudioLoop:
 
         print("[ADA] Input stream opened successfully.")
 
+        try:
+            await self._mic_loop(in_stream, resolved_input_device_index)
+        finally:
+            # On reconnect this task is cancelled; close the mic so each reconnect doesn't leak a stream.
+            try:
+                self._mic_stream.close()
+            except Exception:
+                pass
+
+    async def _mic_loop(self, in_stream, resolved_input_device_index):
+        self._mic_stream = in_stream
         hangover = 0
         while not self.stop_event.is_set():
             if self.paused:
@@ -324,7 +374,10 @@ class AudioLoop:
                 continue
             try:
                 data = await asyncio.to_thread(in_stream.read, CHUNK_SIZE, exception_on_overflow=False)
-                if self._is_model_speaking:
+                if self._model_audio_active():
+                    # Nexora is talking: ignore the mic (it would hear itself) and close any half-finished user turn.
+                    hangover = 0
+                    self.signals.mic_open = False
                     continue
                 # VAD gate: stream only real speech, starve hallucinations + save tokens
                 if _chunk_rms(data) >= SPEECH_RMS_THRESHOLD:
@@ -355,6 +408,7 @@ class AudioLoop:
                         in_stream = await asyncio.to_thread(
                             pya.open, format=FORMAT, channels=CHANNELS, rate=SEND_SAMPLE_RATE, input=True,
                             input_device_index=resolved_input_device_index, frames_per_buffer=CHUNK_SIZE)
+                        self._mic_stream = in_stream
                         reopened = True
                         print("[ADA] Microphone re-opened.")
                         break
@@ -370,10 +424,19 @@ class AudioLoop:
             while True:
                 turn = self.session.receive()
                 async for response in turn:
+                    upd = getattr(response, "session_resumption_update", None)
+                    if upd and upd.resumable and upd.new_handle:
+                        self._resume_handle = upd.new_handle
+                    if getattr(response, "go_away", None):
+                        print(f"[ADA] Gemini will close this session soon ({response.go_away.time_left}); will resume it.")
+
                     if data := response.data:
                         self.audio_in_queue.put_nowait(data)
+                        self._last_audio_rx = time.monotonic()
                         self._is_model_speaking = True
-                        self._model_silence_start = None
+
+                    if response.server_content and response.server_content.interrupted:
+                        self.clear_audio_queue()  # Gemini dropped the rest of this reply, so stop playing it
 
                     if response.server_content:
                         if response.server_content.input_transcription:
@@ -385,9 +448,9 @@ class AudioLoop:
                                         delta = transcript[len(self._last_input_transcription):]
                                     self._last_input_transcription = transcript
                                     if delta:
-                                        self.clear_audio_queue()
-                                        self._is_model_speaking = False
-                                        self._model_silence_start = None
+                                        # No audio clearing here: this transcript often lands after the reply has
+                                        # started, and clearing then cut off Nexora's first words. Real barge-in
+                                        # arrives as server_content.interrupted (handled above).
                                         if self.on_transcription:
                                             self.on_transcription({"sender": "User", "text": delta})
                                         if self.chat_buffer["sender"] != "User":
@@ -758,6 +821,7 @@ class AudioLoop:
             return
 
         playback_queue = queue.Queue()
+        self._playback_q = playback_queue  # so an interruption can drop audio the speaker hasn't played yet
         self.event_loop = asyncio.get_running_loop()
 
         # Gemini sends audio in bursts. Collect ~300 ms before starting each reply so
@@ -788,7 +852,9 @@ class AudioLoop:
                         except Exception:
                             pass
                     if stream.is_active():
+                        self._play_busy_until = time.monotonic() + len(bytestream) / (RECEIVE_SAMPLE_RATE * 2) + PLAYBACK_TAIL
                         stream.write(bytestream)
+                        self._play_busy_until = time.monotonic() + PLAYBACK_TAIL
                 except queue.Empty:
                     idle = True  # reply finished; buffer again before the next one
                     continue
@@ -813,6 +879,7 @@ class AudioLoop:
         except asyncio.CancelledError:
             pass
         finally:
+            self._playback_q = None
             playback_queue.put(None)
             try:
                 if stream.is_active():
@@ -1078,9 +1145,16 @@ class AudioLoop:
 
         while not self.stop_event.is_set():
             try:
-                print(f"[ADA DEBUG] [CONNECT] Connecting to Gemini Live API...")
+                print(f"[ADA DEBUG] [CONNECT] Connecting to Gemini Live API..."
+                      + (" (resuming the same conversation)" if self._resume_handle else ""))
+                # Session resumption keeps the conversation across reconnects; the sliding window stops
+                # Gemini ending audio sessions at its ~15 minute limit.
+                session_config = config.model_copy(update={
+                    "session_resumption": types.SessionResumptionConfig(handle=self._resume_handle),
+                    "context_window_compression": types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
+                })
                 async with (
-                    client.aio.live.connect(model=MODEL, config=config) as session,
+                    client.aio.live.connect(model=MODEL, config=session_config) as session,
                     asyncio.TaskGroup() as tg,
                 ):
                     self.session = session

@@ -47,3 +47,8 @@ Thumbs.db
 backend/daily_state.json
 
 backend/places_cache.json
+
+# Nexora runtime data (personal memories, knowledge, history): never commit
+backend/*.db
+backend/knowledge_graph.json
+backend/focus_history.json
