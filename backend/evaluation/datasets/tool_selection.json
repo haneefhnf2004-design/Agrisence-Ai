@@ -1,0 +1,29 @@
+{
+  "description": "Tool-selection benchmark (online). Each utterance is sent once to a Gemini text model with Nexora's real tool declarations (tools.py) and system prompt (ada.py); the first function call must match `expected`. `acceptable` lists other tools that are also a correct choice.",
+  "cases": [
+    {"u": "check my inbox for new emails", "expected": "read_emails"},
+    {"u": "what's the weather like in London right now", "expected": "get_weather"},
+    {"u": "how hot is it across Sri Lanka today", "expected": "sri_lanka_weather"},
+    {"u": "give me the latest news from Sri Lanka", "expected": "sri_lanka_news"},
+    {"u": "what time is it", "expected": "get_datetime"},
+    {"u": "how much RAM am I using and what is eating my CPU", "expected": "get_system_stats"},
+    {"u": "remember that my sister's birthday is on 14 March", "expected": "save_memory"},
+    {"u": "what did I tell you about my supervisor", "expected": "recall_memory"},
+    {"u": "search my uploaded documents for the refund policy", "expected": "search_knowledge"},
+    {"u": "start a 25 minute focus session for writing my report", "expected": "start_focus_session"},
+    {"u": "pause my focus session", "expected": "control_focus_session"},
+    {"u": "open notepad", "expected": "computer_open"},
+    {"u": "take a screenshot of my screen", "expected": "computer_screenshot"},
+    {"u": "what windows do I have open", "expected": "computer_list_windows"},
+    {"u": "stop controlling my computer immediately", "expected": "computer_emergency_stop"},
+    {"u": "show me a map of Kandy", "expected": "show_map"},
+    {"u": "run a full system diagnostic, something feels broken", "expected": "run_diagnostics"},
+    {"u": "every morning at 8 remind me to drink water", "expected": "manage_events"},
+    {"u": "what do you know about how Nexora and SQLite are connected", "expected": "knowledge_graph", "acceptable": ["recall_memory", "search_knowledge"]},
+    {"u": "first get the time, then show my system stats, then notify me with both", "expected": "create_mission"},
+    {"u": "what would happen if I moved my Downloads folder to the Desktop, don't actually do it", "expected": "simulate", "acceptable": []},
+    {"u": "any suggestions based on how I use you", "expected": "get_recommendations"},
+    {"u": "draft replies to all my recent emails", "expected": "draft_replies_for_all"},
+    {"u": "send an email to test@example.com saying the meeting moved to 3pm", "expected": "send_email"}
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "description": "RAG retrieval benchmark: 8 short documents on distinct topics, 16 queries with the document that answers them. Queries are paraphrased (not copied) so keyword overlap is limited.",
+  "documents": {
+    "solar_panels.txt": "Photovoltaic panels convert sunlight into electricity. Output depends on irradiance, panel angle and temperature; efficiency drops as cells heat up. Most residential systems in Sri Lanka use net metering with the CEB, exporting surplus power to the grid during the day.",
+    "tea_industry.txt": "Ceylon tea is grown in the central highlands, with Nuwara Eliya producing high-grown varieties. Leaves are withered, rolled, oxidised and dried. The Colombo Tea Auction is one of the oldest in the world and sets weekly prices for exporters.",
+    "python_asyncio.txt": "Asyncio runs coroutines on a single-threaded event loop. Blocking calls such as time.sleep or synchronous database drivers stall every task, so they should be moved to a thread with asyncio.to_thread. Tasks are cancelled by raising CancelledError inside the coroutine.",
+    "gmail_app_passwords.txt": "Gmail requires two-step verification before an app password can be created. The 16-character password replaces the normal account password for IMAP and SMTP clients and can be revoked at any time from the Google account security page.",
+    "first_aid_burns.txt": "For a minor burn, cool the area under cool running water for twenty minutes, remove rings or tight items, and cover loosely with cling film. Do not apply ice, butter or toothpaste. Seek medical help for burns larger than the palm or on the face.",
+    "sqlite_wal.txt": "SQLite write-ahead logging mode lets readers continue while a writer appends to the WAL file. Checkpoints copy the WAL back into the main database. WAL improves concurrency but requires all processes to be on the same machine.",
+    "monsoon_climate.txt": "Sri Lanka has two monsoon seasons: the south-west monsoon from May to September brings rain to the west and south, and the north-east monsoon from December to February wets the north and east. Inter-monsoon periods bring afternoon thunderstorms.",
+    "transformer_models.txt": "Transformer models process tokens in parallel using self-attention, which weighs how much each token should attend to every other token. Positional encodings add order information. Large language models are decoder-only transformers trained to predict the next token."
+  },
+  "queries": [
+    {"q": "why do my rooftop solar cells produce less power on hot afternoons", "doc": "solar_panels.txt"},
+    {"q": "selling extra electricity back to the utility", "doc": "solar_panels.txt"},
+    {"q": "where is high grown tea cultivated", "doc": "tea_industry.txt"},
+    {"q": "weekly auction that determines leaf prices", "doc": "tea_industry.txt"},
+    {"q": "my coroutine freezes the whole event loop when I call a blocking function", "doc": "python_asyncio.txt"},
+    {"q": "how to stop a running task in async python", "doc": "python_asyncio.txt"},
+    {"q": "the mail client says my google password is wrong for imap", "doc": "gmail_app_passwords.txt"},
+    {"q": "do I need 2FA before generating an application specific password", "doc": "gmail_app_passwords.txt"},
+    {"q": "what should I put on a kitchen scald", "doc": "first_aid_burns.txt"},
+    {"q": "is ice good for treating a burn", "doc": "first_aid_burns.txt"},
+    {"q": "letting readers and a writer work on the database at the same time", "doc": "sqlite_wal.txt"},
+    {"q": "what does a checkpoint do in sqlite journaling", "doc": "sqlite_wal.txt"},
+    {"q": "which months does rain hit Colombo in the southwest season", "doc": "monsoon_climate.txt"},
+    {"q": "when does the north east of the island get its wet season", "doc": "monsoon_climate.txt"},
+    {"q": "how does attention decide which words matter", "doc": "transformer_models.txt"},
+    {"q": "what objective are GPT style models trained on", "doc": "transformer_models.txt"}
+  ]
+}

@@ -134,6 +134,10 @@ function App() {
     const [diagReport, setDiagReport] = useState(null);
     const [diagRunning, setDiagRunning] = useState(false);
     const [perfHistory, setPerfHistory] = useState([]);
+    const [evalState, setEvalState] = useState({ running: false, summary: '' });
+    const [recs, setRecs] = useState(null);
+    const [usageCollection, setUsageCollection] = useState(false);
+    const [simResult, setSimResult] = useState(null);
     const [clock, setClock] = useState(new Date());
     const [sysStats, setSysStats] = useState(null);
     const [booting, setBooting] = useState(true);
@@ -240,17 +244,15 @@ function App() {
         socket.on('feedback_list', (d) => setFeedbackList(d.feedback || []));
         socket.on('datasets_list', (d) => setDatasets(d.datasets || []));
         socket.on('missions_list', (d) => setMissions(d.missions || []));
-        socket.on('mission_progress', (d) => {
-            setMissions(prev => {
-                const idx = prev.findIndex(m => m.id === d.mission_id);
-                if (idx >= 0) {
-                    const updated = [...prev];
-                    updated[idx] = { ...updated[idx], ...d.data };
-                    return updated;
-                }
-                return prev;
-            });
-        });
+        socket.on('mission_progress', () => socket.emit('get_missions'));
+        socket.on('mission_error', (d) => addMessage('System', `Mission not started: ${d.error}`));
+        socket.on('event_rule_error', (d) => addMessage('System', `Rule not created: ${d.error}`));
+        socket.on('nexora_notification', (d) => addMessage('Nexora', `${d.title}: ${d.message}`));
+        socket.on('simulation_result', setSimResult);
+        socket.on('eval_results', (d) => setEvalState({ running: !!d.running, summary: d.summary || '' }));
+        socket.on('recommendations', setRecs);
+        socket.on('settings_loaded', (d) => setUsageCollection(!!d.settings?.usage_data_collection));
+        socket.on('settings_updated', (d) => setUsageCollection(!!d.settings?.usage_data_collection));
         socket.on('mission_created', () => socket.emit('get_missions'));
         socket.on('mission_cancelled', () => socket.emit('get_missions'));
         socket.on('mission_detail', (d) => setMissionDetail(d.mission));
@@ -302,7 +304,8 @@ function App() {
                 'missions_list', 'mission_progress', 'mission_created', 'mission_cancelled', 'mission_detail',
                 'event_rules_list', 'event_history', 'event_fired',
                 'kg_data', 'kg_search_results',
-                'diagnostics_report', 'perf_history'].forEach((e) => socket.off(e));
+                'diagnostics_report', 'perf_history', 'mission_error', 'event_rule_error', 'nexora_notification',
+                'simulation_result', 'eval_results', 'recommendations', 'settings_loaded', 'settings_updated'].forEach((e) => socket.off(e));
         };
     }, []);
 
@@ -523,7 +526,7 @@ function App() {
                         <HardwareStrip stats={sysStats} />
                         <div className="flex border-b border-white/5">
                             {[['log', 'LOG', Activity], ['system', 'TASKS', Cpu], ['focus', 'FOCUS', Target], ['memory', 'MEMORY', Sparkles], ['train', 'TRAIN', Database], ['missions', 'MISSIONS', Hammer], ['events', 'EVENTS', Activity], ['diag', 'DIAG', Activity]].map(([k, l, I]) => (
-                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') { socket.emit('get_memories'); socket.emit('get_knowledge_graph'); } else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); else if (k === 'diag') socket.emit('get_perf_history'); }}
+                                <button key={k} onClick={() => { setRightTab(k); if (k === 'train') { socket.emit('get_feedback_stats'); socket.emit('list_datasets'); } else if (k === 'memory') { socket.emit('get_memories'); socket.emit('get_knowledge_graph'); } else if (k === 'missions') socket.emit('get_missions'); else if (k === 'events') socket.emit('list_event_rules'); else if (k === 'diag') { socket.emit('get_perf_history'); socket.emit('get_eval_results'); socket.emit('get_settings'); } }}
                                     className={`flex-1 py-3 text-[10px] tracking-[0.25em] flex items-center justify-center gap-1.5 ${rightTab === k ? 'text-cyan-200 border-b border-cyan-300' : 'text-slate-500 hover:text-slate-300'}`}>
                                     <I size={12} /> {l}
                                 </button>
@@ -749,15 +752,30 @@ function App() {
                                                         <span className={`w-1.5 h-1.5 rounded-full ${
                                                             st.status === 'done' ? 'bg-emerald-400' :
                                                             st.status === 'running' ? 'bg-amber-400 animate-pulse' :
-                                                            st.status === 'failed' ? 'bg-rose-400' : 'bg-slate-500'
+                                                            st.status === 'failed' ? 'bg-rose-400' :
+                                                            st.status === 'skipped' ? 'bg-slate-700' : 'bg-slate-500'
                                                         }`} />
-                                                        <span className="text-slate-400 flex-1 truncate">{st.title}</span>
+                                                        <span className="text-slate-400 flex-1 truncate" title={st.error || ''}>{st.title}{st.retries ? ` (retried ${st.retries})` : ''}</span>
                                                         <span className="text-slate-600">{st.tool_name}</span>
                                                     </div>
                                                 ))}
-                                                {['pending', 'running', 'paused'].includes(m.status) && (
-                                                    <button onClick={() => socket.emit('cancel_mission', { mission_id: m.id })} className="mt-2 text-[9px] text-rose-400 hover:text-rose-200 tracking-wider">CANCEL</button>
+                                                {m.result && (
+                                                    <div className="text-[9px] text-slate-600 mt-1">
+                                                        {m.result.done}/{m.result.total} done · {m.result.duration_s}s{m.result.verified ? ' · verified' : ''}
+                                                        {(m.result.failures || []).slice(0, 2).map((f, i) => <div key={i} className="text-rose-300/70 truncate">{f.title}: {f.error}</div>)}
+                                                    </div>
                                                 )}
+                                                <div className="flex gap-3">
+                                                    {m.status === 'running' && (
+                                                        <button onClick={() => socket.emit('pause_mission', { mission_id: m.id })} className="mt-2 text-[9px] text-amber-300 hover:text-amber-100 tracking-wider">PAUSE</button>
+                                                    )}
+                                                    {m.status === 'paused' && (
+                                                        <button onClick={() => socket.emit('resume_mission', { mission_id: m.id })} className="mt-2 text-[9px] text-emerald-300 hover:text-emerald-100 tracking-wider">RESUME</button>
+                                                    )}
+                                                    {['pending', 'running', 'paused'].includes(m.status) && (
+                                                        <button onClick={() => socket.emit('cancel_mission', { mission_id: m.id })} className="mt-2 text-[9px] text-rose-400 hover:text-rose-200 tracking-wider">CANCEL</button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))
                                     )}
@@ -781,12 +799,20 @@ function App() {
                                                             className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
                                                                 r.enabled ? 'border-emerald-400/30 text-emerald-300' : 'border-slate-400/30 text-slate-500'
                                                             }`}>{r.enabled ? 'ON' : 'OFF'}</button>
+                                                        {r.needs_approval && (
+                                                            <button
+                                                                onClick={() => socket.emit('approve_event_rule', { rule_id: r.id })}
+                                                                className="text-[9px] px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-300 hover:text-amber-100">APPROVE</button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => socket.emit('dry_run_event_rule', { rule_id: r.id })}
+                                                            className="text-[9px] text-slate-400 hover:text-slate-200">DRY RUN</button>
                                                         <button
                                                             onClick={() => socket.emit('fire_event_rule', { rule_id: r.id })}
                                                             className="text-[9px] text-cyan-400 hover:text-cyan-200">FIRE</button>
                                                     </div>
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 mt-0.5">{r.trigger_type} → {r.action_type}</div>
+                                                <div className="text-[10px] text-slate-500 mt-0.5">{r.trigger_type} → {r.action_type}{r.needs_approval ? ' · waiting for your approval' : ''}</div>
                                                 {r.last_fired && <div className="text-[9px] text-slate-600 mt-0.5">Last: {new Date(r.last_fired).toLocaleString()}</div>}
                                             </div>
                                         ))
@@ -797,8 +823,18 @@ function App() {
                                             {eventHistory.slice(0, 5).map((h, i) => (
                                                 <div key={i} className="text-[10px] text-slate-500 py-0.5 truncate">
                                                     <span className="text-cyan-400/70">{h.rule_name}</span> · {new Date(h.fired_at).toLocaleTimeString()} · {h.action_type}
+                                                    {h.status && <span className={h.status === 'ok' ? 'text-emerald-400/70' : h.status === 'blocked' ? 'text-amber-300/70' : 'text-rose-400/70'}> · {h.status}</span>}
                                                 </div>
                                             ))}
+                                        </div>
+                                    )}
+                                    {simResult && (
+                                        <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.03] px-3 py-2">
+                                            <div className="flex justify-between text-[9px] tracking-wider text-amber-300 mb-1">
+                                                <span>SIMULATION · NOTHING WAS EXECUTED</span>
+                                                <button onClick={() => setSimResult(null)} className="text-slate-500 hover:text-slate-300">CLOSE</button>
+                                            </div>
+                                            <pre className="text-[9px] text-slate-400 whitespace-pre-wrap max-h-48 overflow-auto">{JSON.stringify(simResult, null, 1)}</pre>
                                         </div>
                                     )}
                                 </div>
@@ -818,13 +854,29 @@ function App() {
                                             {/* API Health */}
                                             <div>
                                                 <div className="text-[9px] text-slate-600 mb-1">API HEALTH</div>
-                                                {Object.entries(diagReport.api_health || {}).map(([k, v]) => (
+                                                {Object.entries(diagReport.api_health || {}).filter(([, v]) => typeof v === 'boolean').map(([k, v]) => (
                                                     <div key={k} className="flex items-center justify-between text-[10px] py-0.5">
                                                         <span className="text-slate-400">{k.replace(/_/g,' ')}</span>
                                                         <span className={v ? 'text-emerald-400' : 'text-rose-400'}>{v ? 'OK' : 'FAIL'}</span>
                                                     </div>
                                                 ))}
                                             </div>
+                                            {diagReport.model_connectivity && (
+                                                <div className="flex items-center justify-between text-[10px] py-0.5">
+                                                    <span className="text-slate-400">gemini model</span>
+                                                    <span className={diagReport.model_connectivity.status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}>
+                                                        {diagReport.model_connectivity.status?.toUpperCase()}{diagReport.model_connectivity.latency_ms ? ` · ${Math.round(diagReport.model_connectivity.latency_ms)} ms` : ''}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {(diagReport.bottlenecks?.findings || []).length > 0 && (
+                                                <div>
+                                                    <div className="text-[9px] text-slate-600 mb-1">BOTTLENECKS</div>
+                                                    {diagReport.bottlenecks.findings.map((f, i) => (
+                                                        <div key={i} className={`text-[10px] py-0.5 ${f.severity === 'high' ? 'text-rose-300' : 'text-amber-300/80'}`}>· {f.finding}</div>
+                                                    ))}
+                                                </div>
+                                            )}
                                             {/* Backend Health */}
                                             <div>
                                                 <div className="text-[9px] text-slate-600 mb-1">MODULES</div>
@@ -849,6 +901,33 @@ function App() {
                                     {!diagReport && !diagRunning && (
                                         <div className="text-xs text-slate-500">Click RUN to check all systems.</div>
                                     )}
+                                    <div className="mt-3 pt-3 border-t border-white/5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-[10px] tracking-[0.25em] text-slate-500">AGENT EVALUATION</div>
+                                            <button onClick={() => socket.emit('run_evaluation')} disabled={evalState.running}
+                                                className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider disabled:opacity-50">
+                                                {evalState.running ? 'RUNNING…' : 'RUN'}</button>
+                                        </div>
+                                        <pre className="text-[9px] text-slate-400 whitespace-pre-wrap mt-1">{evalState.summary || 'No results yet. RUN runs the offline benchmark suites on temporary data.'}</pre>
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-white/5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-[10px] tracking-[0.25em] text-slate-500">SUGGESTIONS</div>
+                                            <button onClick={() => socket.emit('get_recommendations')} className="text-[9px] text-cyan-400 hover:text-cyan-200 tracking-wider">CHECK</button>
+                                        </div>
+                                        <label className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
+                                            <input type="checkbox" checked={usageCollection}
+                                                onChange={(e) => socket.emit('update_settings', { usage_data_collection: e.target.checked })} />
+                                            Learn from my usage (tool names + times, stored only on this PC)
+                                        </label>
+                                        {recs && (recs.status !== 'ok' ? (
+                                            <div className="text-[10px] text-slate-500 mt-1">{recs.message}</div>
+                                        ) : recs.recommendations.length === 0 ? (
+                                            <div className="text-[10px] text-slate-500 mt-1">No clear pattern yet.</div>
+                                        ) : recs.recommendations.slice(0, 5).map((r, i) => (
+                                            <div key={i} className="text-[10px] text-emerald-300/80 py-0.5">· {r.type === 'routine' ? `${r.tool} around ${r.window}` : r.tools.join(' → ')} <span className="text-slate-500">({r.evidence})</span></div>
+                                        )))}
+                                    </div>
                                     {/* Performance sparkline (numbers) */}
                                     {perfHistory.length > 0 && (
                                         <div className="mt-3">

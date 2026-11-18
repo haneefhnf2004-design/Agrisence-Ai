@@ -10,7 +10,10 @@ import time
 # Try to reuse or create an embedder with the same fallback pattern as memory.py
 try:
     from sentence_transformers import SentenceTransformer
-    _embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    try:  # cached copy first, so startup doesn't stall on network retries
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2', local_files_only=True)
+    except Exception:
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2')
     _has_embeddings = True
     print("[RAG] Sentence-transformers loaded — semantic search enabled.")
 except Exception:
@@ -162,7 +165,19 @@ class RAGEngine:
                 )
                 conn.commit()
 
-            return {"ok": True, "chunks": len(chunks)}
+            graph = {"entities": 0, "relations": 0}
+            try:  # graph facts point back at the chunk (doc:<file>#<i>); the text stays only in this DB
+                from knowledge_graph import get_graph
+                g = get_graph()
+                g.remove_source(f"doc:{filename}")
+                for i, chunk in enumerate(chunks):
+                    r = g.extract_and_add(chunk, f"doc:{filename}#{i}")
+                    graph["entities"] += len(r["entities"])
+                    graph["relations"] += len(r["relations"])
+            except Exception as e:
+                print(f"[RAG] knowledge graph update failed: {e}")
+
+            return {"ok": True, "chunks": len(chunks), "graph": graph}
         except Exception as e:
             print(f"[RAG] ingest_file error: {e}")
             return {"error": str(e)}
@@ -242,6 +257,11 @@ class RAGEngine:
                 conn.execute("DELETE FROM knowledge_base WHERE filename=?", (filename,))
                 cur = conn.execute("DELETE FROM documents WHERE filename=?", (filename,))
                 conn.commit()
+            try:
+                from knowledge_graph import get_graph
+                get_graph().remove_source(f"doc:{filename}")
+            except Exception as e:
+                print(f"[RAG] knowledge graph cleanup failed: {e}")
             return cur.rowcount > 0
         except Exception as e:
             print(f"[RAG] delete_document error: {e}")

@@ -32,11 +32,9 @@ try:
 except Exception:
     rag_engine = None
 
-try:
-    from mission_control import MissionEngine as _MissionEngine
-    _ada_mission_engine = _MissionEngine()
-except Exception:
-    _ada_mission_engine = None
+import assistant_tools   # missions, events, knowledge graph, diagnostics, digital twin, recommendations
+import tool_runner
+import telemetry
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
@@ -160,8 +158,8 @@ config = types.LiveConnectConfig(
 # Tools handled by AudioLoop._run_nexora_tool, and the ones among them that never need an approval click.
 NEXORA_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task",
                 "draft_replies_for_all", "send_reply_drafts", "show_nexora_window", "save_memory", "recall_memory",
-                "search_knowledge", "create_mission")
-NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory", "search_knowledge", "create_mission")
+                "search_knowledge", *assistant_tools.HANDLED)
+NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sri_lanka_news", "omniroute_task", "show_nexora_window", "save_memory", "recall_memory", "search_knowledge", *assistant_tools.HANDLED)
 
 pya = pyaudio.PyAudio()
 
@@ -192,6 +190,7 @@ class AudioLoop:
         self.session = None
 
         self.email_agent = EmailAgent()
+        tool_runner.set_email_agent(self.email_agent)   # lets missions/automations read mail (never send)
         self.open_email = None  # email last opened with show_email: the default target for reply_to_email
         self.reply_drafts = []  # [(original email, draft body)] from draft_replies_for_all, waiting for approval
 
@@ -488,6 +487,7 @@ class AudioLoop:
                             if fc.name in ["read_emails", "show_email", "reply_to_email", "send_email", "get_weather", "show_map", "gods_eye",
                                            "start_focus_session", "control_focus_session", *NEXORA_TOOLS] or fc.name in ALLOWED_COMPUTER_TOOLS:
                                 prompt = fc.args.get("prompt", "")
+                                _tool_t0 = time.perf_counter()
                                 # show_email reads mail, so it follows the read_emails permission
                                 perm_key = {"show_email": "read_emails", "reply_to_email": "send_email",
                                             "draft_replies_for_all": "read_emails", "send_reply_drafts": "send_email"}.get(fc.name, fc.name)
@@ -789,6 +789,12 @@ class AudioLoop:
                                     )
                                     function_responses.append(function_response)
 
+                                if function_responses and function_responses[-1].name == fc.name:
+                                    _res = str((function_responses[-1].response or {}).get("result", ""))
+                                    _failed = _res.startswith(("User denied", "Sir, that computer action failed", "Unknown tool",
+                                                               "That didn't work", "I could not", "Rule not created"))
+                                    telemetry.record(fc.name, "voice", not _failed, (time.perf_counter() - _tool_t0) * 1000,
+                                                     _res[:200] if _failed else None)
                                 for fr in function_responses:
                                     res = str((fr.response or {}).get("result", ""))
                                     self._push_widget("task", {"id": fr.id, "tool": fr.name,
@@ -1121,14 +1127,8 @@ class AudioLoop:
                 return "No relevant documents found in the knowledge base."
             return "Knowledge base is not available."
 
-        if name == "create_mission" and _ada_mission_engine:
-            mid = _ada_mission_engine.create_mission(
-                args.get('title', 'Mission'),
-                args.get('description', ''),
-                args.get('subtasks', [])
-            )
-            asyncio.create_task(_ada_mission_engine.execute_mission(mid))
-            return f'Mission created with ID {mid} and execution started.'
+        if name in assistant_tools.HANDLED:
+            return await assistant_tools.handle(name, args, self._push_widget)
 
         return f"Unknown tool {name}."
 

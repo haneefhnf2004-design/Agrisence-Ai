@@ -333,33 +333,75 @@ search_knowledge_tool = {
     }
 }
 
+_MISSION_TOOLS = ("get_datetime, get_system_stats, sri_lanka_weather, sri_lanka_news, save_memory, recall_memory, "
+                  "search_knowledge, knowledge_graph_query, run_diagnostics, read_emails, notify, wait, "
+                  "app_active_window, app_recent, app_wait_window, file_list, file_copy, file_move, computer_list_windows, "
+                  "computer_find_text, computer_open, computer_focus_window, computer_click_text, computer_type, "
+                  "computer_key, computer_hotkey, computer_mouse_click, computer_mouse_move")
+
+_SUBTASK_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "title": {"type": "STRING", "description": "Unique short step name; other steps refer to it."},
+        "tool_name": {"type": "STRING", "description": "One of: " + _MISSION_TOOLS},
+        "args": {"type": "STRING", "description": "JSON object of tool arguments. Use {{Step title}} or {{Step title.key}} to insert an earlier step's output."},
+        "depends_on": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Titles of steps that must finish first."},
+        "verify": {"type": "STRING", "description": "Optional JSON check on the output, e.g. {\"contains\": \"report.txt\"}, {\"field\": \"count\", \"equals\": 2}, {\"path_exists\": \"C:/...\"}."},
+        "max_retries": {"type": "INTEGER", "description": "Retries on failure (default 2)."},
+    },
+    "required": ["title", "tool_name"],
+}
+
 create_mission_tool = {
     "name": "create_mission",
-    "description": "Creates and executes a multi-step mission. Use when the user asks to do several tasks in sequence or in parallel. Each subtask maps to a tool call.",
+    "description": ("Plan and run a multi-step task in the background. Break the user's goal into steps, each one a tool call, "
+                    "with depends_on for ordering. Independent read-only steps run in parallel; mouse/keyboard/file steps run one "
+                    "at a time. Steps retry on failure, can verify their output, and pass results on with {{Step title}}. "
+                    "Sending email is not allowed inside missions. For cross-app work, follow computer_open with "
+                    "app_wait_window to verify the app actually opened. Set dry_run=true to preview without running."),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "title": {"type": "STRING", "description": "Short mission title."},
             "description": {"type": "STRING", "description": "What the mission does overall."},
-            "subtasks": {"type": "ARRAY", "items": {"type": "OBJECT"}, "description": "List of subtask dicts with keys: title, tool_name, args (dict), depends_on (list of subtask titles or ids)."}
+            "subtasks": {"type": "ARRAY", "items": _SUBTASK_SCHEMA},
+            "dry_run": {"type": "BOOLEAN", "description": "true = simulate only (nothing is executed)."},
         },
-        "required": ["title", "description", "subtasks"]
+        "required": ["title", "subtasks"]
+    }
+}
+
+manage_missions_tool = {
+    "name": "manage_missions",
+    "description": "Check, pause, resume or cancel background missions.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "action": {"type": "STRING", "enum": ["list", "status", "pause", "resume", "cancel"]},
+            "mission_id": {"type": "STRING", "description": "Mission id (not needed for list)."},
+        },
+        "required": ["action"]
     }
 }
 
 manage_events_tool = {
     "name": "manage_events",
-    "description": "Creates or lists event automation rules. Rules fire on file changes, schedules, or app health. Use when the user asks to automate something or watch for a condition.",
+    "description": ("Creates, lists, removes, fires or dry-runs automation rules. Rules fire on schedules, file changes, app health "
+                    "or system conditions (e.g. CPU above 90%). Rules that run tools or missions do nothing until the "
+                    "user approves them in the Nexora EVENTS tab; tell the user that."),
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "action": {"type": "STRING", "enum": ["add", "list", "fire"], "description": "add: create a new rule, list: show all rules, fire: manually trigger a rule."},
-            "rule_name": {"type": "STRING", "description": "Name for the new rule (required for add)."},
-            "trigger_type": {"type": "STRING", "enum": ["schedule", "file_change", "app_health", "manual"]},
-            "trigger_config": {"type": "STRING", "description": "JSON string with trigger config (interval_minutes, daily_at, folder_path, process_name, condition)."},
-            "action_type": {"type": "STRING", "enum": ["notify", "run_tool"], "description": "What to do when the rule fires."},
-            "action_config": {"type": "STRING", "description": "JSON string with action config (message for notify, tool_name + args for run_tool)."},
-            "rule_id": {"type": "STRING", "description": "Rule id for fire action."}
+            "action": {"type": "STRING", "enum": ["add", "list", "fire", "remove", "dry_run", "history"]},
+            "rule_name": {"type": "STRING", "description": "Name for the new rule (add)."},
+            "trigger_type": {"type": "STRING", "enum": ["schedule", "file_change", "app_health", "condition", "manual"]},
+            "trigger_config": {"type": "STRING", "description": ("JSON. schedule: {\"interval_minutes\": 30} or {\"daily_at\": \"08:00\"}; "
+                               "file_change: {\"folder_path\": \"C:/...\", \"pattern\": \"*.pdf\"}; app_health: {\"process_name\": \"chrome\", "
+                               "\"condition\": \"not_running\"}; condition: {\"metric\": \"cpu_percent|ram_percent|disk_percent|battery_percent|process_count\", "
+                               "\"op\": \">\", \"value\": 90}.")},
+            "action_type": {"type": "STRING", "enum": ["notify", "run_tool", "run_mission"]},
+            "action_config": {"type": "STRING", "description": "JSON. notify: {\"message\": \"...\"}; run_tool: {\"tool_name\": \"...\", \"args\": {}}; run_mission: {\"title\": \"...\", \"subtasks\": [...]}."},
+            "rule_id": {"type": "STRING", "description": "Rule id (fire, remove, dry_run)."}
         },
         "required": ["action"]
     }
@@ -367,14 +409,18 @@ manage_events_tool = {
 
 knowledge_graph_tool = {
     "name": "knowledge_graph",
-    "description": "Searches or adds to the knowledge graph. Use to find connections between people, projects, concepts, and events that Nexora has learned about.",
+    "description": ("Query the knowledge graph Nexora builds from memories and uploaded documents: entities, how they are related, "
+                    "and where each fact came from (memory:<id> or doc:<file>#<chunk>)."),
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "action": {"type": "STRING", "enum": ["search", "add_entity", "get_all"], "description": "search: find related entities, add_entity: add a new entity, get_all: list all entities."},
-            "query": {"type": "STRING", "description": "Search query (for search action)."},
-            "entity_name": {"type": "STRING", "description": "Entity name (for add_entity)."},
-            "entity_type": {"type": "STRING", "description": "Entity type: person, project, document, concept, event, task, decision."},
+            "action": {"type": "STRING", "enum": ["context", "search", "relations", "path", "add_entity", "add_fact", "get_all"],
+                       "description": "context: facts about a topic; relations: facts of one entity; path: how two entities connect; add_fact: store 'X relation Y'."},
+            "query": {"type": "STRING", "description": "Topic or entity name."},
+            "entity_b": {"type": "STRING", "description": "Second entity (path) or object (add_fact)."},
+            "relation": {"type": "STRING", "description": "Relation for add_fact / filter for relations, e.g. works_at, uses, part_of."},
+            "entity_name": {"type": "STRING", "description": "Entity name (add_entity)."},
+            "entity_type": {"type": "STRING", "description": "person, project, document, concept, event, task, decision."},
             "properties": {"type": "STRING", "description": "JSON string of additional properties."}
         },
         "required": ["action"]
@@ -383,7 +429,42 @@ knowledge_graph_tool = {
 
 run_diagnostics_tool = {
     "name": "run_diagnostics",
-    "description": "Runs a full system diagnostic: checks API health, database health, backend module health, and analyzes error logs. Use when the user asks why something is broken, or asks for a system check.",
+    "description": ("Runs a full system diagnostic: internet, Gemini key + model connectivity, OmniRoute, database integrity, "
+                    "backend modules, error logs and performance bottlenecks, with recommendations. Use when something is broken or slow."),
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
+simulate_tool = {
+    "name": "simulate",
+    "description": ("Digital twin: preview what WOULD happen without doing it. file_operation: which files a copy/move/rename/delete "
+                    "touches, sizes, conflicts, permissions, disk space. mission: execution order, parallel steps, time estimate and "
+                    "what breaks if a step fails. event_rule: whether an automation rule would fire now and what it would do."),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "target": {"type": "STRING", "enum": ["file_operation", "mission", "event_rule"]},
+            "op": {"type": "STRING", "enum": ["copy", "move", "rename", "delete"]},
+            "src": {"type": "STRING", "description": "Source path (e.g. 'Downloads' or 'C:/Users/me/Desktop/a.txt')."},
+            "dst": {"type": "STRING", "description": "Destination path."},
+            "pattern": {"type": "STRING", "description": "Optional glob inside src, e.g. '*.pdf'."},
+            "subtasks": {"type": "ARRAY", "items": _SUBTASK_SCHEMA, "description": "Mission steps (target=mission)."},
+            "fail_steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Step titles to test failing (default: each step)."},
+            "rule_id": {"type": "STRING", "description": "Rule id (target=event_rule)."},
+        },
+        "required": ["target"]
+    }
+}
+
+get_recommendations_tool = {
+    "name": "get_recommendations",
+    "description": ("Usage-based suggestions (routines worth automating, steps the user often does together). Only works when the "
+                    "user has turned on usage data collection and there is enough history; otherwise it says so. Never invent suggestions."),
+    "parameters": {"type": "OBJECT", "properties": {}}
+}
+
+get_app_context_tool = {
+    "name": "get_app_context",
+    "description": "Which app/window the user is in now and which apps they switched between recently.",
     "parameters": {"type": "OBJECT", "properties": {}}
 }
 
@@ -423,8 +504,12 @@ tools_list = [{
         recall_memory_tool,
         search_knowledge_tool,
         create_mission_tool,
+        manage_missions_tool,
         manage_events_tool,
         knowledge_graph_tool,
         run_diagnostics_tool,
+        simulate_tool,
+        get_recommendations_tool,
+        get_app_context_tool,
     ]
 }, {"google_search": {}}]  # live web search for news and current events

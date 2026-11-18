@@ -1,0 +1,59 @@
+{
+  "description": "Mission execution benchmark. Runs the real MissionEngine + real tool_runner tools inside a temporary sandbox folder ({SANDBOX}). eval_flaky / eval_echo are fault-injection tools registered only during evaluation. Each case states the expected mission status, step statuses and post-conditions checked on disk.",
+  "setup_files": {"in/report.txt": "Quarterly report v1\nrevenue: 1200\n", "in/notes.md": "# notes\n", "out/existing.txt": "keep me\n"},
+  "cases": [
+    {"id": "simple_chain", "tags": ["completion"],
+     "subtasks": [
+       {"title": "now", "tool_name": "get_datetime"},
+       {"title": "tell", "tool_name": "notify", "args": {"message": "It is {{now}}"}, "depends_on": ["now"], "verify": {"field": "message", "contains": "It is 20"}}],
+     "expect": {"status": "completed", "steps": {"now": "done", "tell": "done"}}},
+    {"id": "file_pipeline", "tags": ["completion", "cross_step_context"],
+     "subtasks": [
+       {"title": "copy", "tool_name": "file_copy", "args": {"src": "{SANDBOX}/in/report.txt", "dst": "{SANDBOX}/out"}},
+       {"title": "check", "tool_name": "file_list", "args": {"path": "{SANDBOX}/out"}, "depends_on": ["copy"], "verify": {"field": "files", "contains": "report.txt"}},
+       {"title": "archive", "tool_name": "file_move", "args": {"src": "{{copy.dst}}", "dst": "{SANDBOX}/archive/report_final.txt"}, "depends_on": ["check"]}],
+     "expect": {"status": "completed", "steps": {"copy": "done", "check": "done", "archive": "done"}},
+     "checks": [{"type": "file_equals", "a": "{SANDBOX}/in/report.txt", "b": "{SANDBOX}/archive/report_final.txt"},
+                {"type": "not_exists", "path": "{SANDBOX}/out/report.txt"}]},
+    {"id": "parallel_reads", "tags": ["completion", "parallel"],
+     "subtasks": [
+       {"title": "time", "tool_name": "get_datetime"},
+       {"title": "list in", "tool_name": "file_list", "args": {"path": "{SANDBOX}/in"}},
+       {"title": "list out", "tool_name": "file_list", "args": {"path": "{SANDBOX}/out"}},
+       {"title": "graph", "tool_name": "knowledge_graph_query", "args": {"query": "Nexora"}},
+       {"title": "sum", "tool_name": "notify", "args": {"message": "in={{list in.count}} out={{list out.count}}"}, "depends_on": ["time", "list in", "list out", "graph"], "verify": {"field": "message", "equals": "in=2 out=1"}}],
+     "expect": {"status": "completed", "steps": {"time": "done", "list in": "done", "list out": "done", "graph": "done", "sum": "done"}}},
+    {"id": "flaky_recovered", "tags": ["completion", "recovery"],
+     "subtasks": [
+       {"title": "flaky", "tool_name": "eval_flaky", "args": {"key": "a", "fail_times": 2}, "max_retries": 2},
+       {"title": "after", "tool_name": "get_datetime", "depends_on": ["flaky"]}],
+     "expect": {"status": "completed", "steps": {"flaky": "done", "after": "done"}},
+     "checks": [{"type": "retries", "step": "flaky", "equals": 2}]},
+    {"id": "flaky_exhausted", "tags": ["failure_containment"],
+     "subtasks": [
+       {"title": "flaky", "tool_name": "eval_flaky", "args": {"key": "b", "fail_times": 5}, "max_retries": 1},
+       {"title": "dependent", "tool_name": "get_datetime", "depends_on": ["flaky"]},
+       {"title": "independent", "tool_name": "get_datetime"}],
+     "expect": {"status": "failed", "steps": {"flaky": "failed", "dependent": "skipped", "independent": "done"}},
+     "checks": [{"type": "retries", "step": "flaky", "equals": 1}]},
+    {"id": "non_retryable", "tags": ["failure_containment"],
+     "subtasks": [
+       {"title": "bad copy", "tool_name": "file_copy", "args": {"src": "{SANDBOX}/in/missing.txt", "dst": "{SANDBOX}/out"}},
+       {"title": "uses copy", "tool_name": "file_list", "args": {"path": "{SANDBOX}/out"}, "depends_on": ["bad copy"]}],
+     "expect": {"status": "failed", "steps": {"bad copy": "failed", "uses copy": "skipped"}},
+     "checks": [{"type": "retries", "step": "bad copy", "equals": 0}]},
+    {"id": "verify_catches_wrong", "tags": ["verification"],
+     "subtasks": [
+       {"title": "echo", "tool_name": "eval_echo", "args": {"text": "hello"}, "verify": {"contains": "goodbye"}, "max_retries": 0}],
+     "expect": {"status": "failed", "steps": {"echo": "failed"}}},
+    {"id": "conflict_protection", "tags": ["failure_containment", "safety"],
+     "subtasks": [
+       {"title": "overwrite", "tool_name": "file_copy", "args": {"src": "{SANDBOX}/in/notes.md", "dst": "{SANDBOX}/out/existing.txt"}}],
+     "expect": {"status": "failed", "steps": {"overwrite": "failed"}},
+     "checks": [{"type": "file_text", "path": "{SANDBOX}/out/existing.txt", "equals": "keep me\n"}]},
+    {"id": "sandbox_escape_blocked", "tags": ["failure_containment", "safety"],
+     "subtasks": [
+       {"title": "escape", "tool_name": "file_list", "args": {"path": "{SANDBOX}/../"}}],
+     "expect": {"status": "failed", "steps": {"escape": "failed"}}}
+  ]
+}

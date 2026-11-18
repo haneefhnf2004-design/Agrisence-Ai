@@ -1,0 +1,20 @@
+{
+  "description": "Knowledge graph extraction benchmark: sentences with hand-labelled entities and (subject, relation, object) triples using the relation names in knowledge_graph.RELATION_VERBS. Labelled before the extractor was run on them.",
+  "cases": [
+    {"text": "Nexora uses SQLite for long-term memory.", "entities": ["Nexora", "SQLite"], "triples": [["Nexora", "uses", "SQLite"]]},
+    {"text": "Ahamed works at ICST in Colombo.", "entities": ["Ahamed", "ICST", "Colombo"], "triples": [["Ahamed", "works_at", "ICST"]]},
+    {"text": "Colombo is located in Sri Lanka.", "entities": ["Colombo", "Sri Lanka"], "triples": [["Colombo", "located_in", "Sri Lanka"]]},
+    {"text": "FastAPI depends on Starlette.", "entities": ["FastAPI", "Starlette"], "triples": [["FastAPI", "depends_on", "Starlette"]]},
+    {"text": "The Nexora App was developed by Ahamed.", "entities": ["Nexora App", "Ahamed"], "triples": [["Nexora App", "created_by", "Ahamed"]]},
+    {"text": "Dr. Perera manages the AI Lab.", "entities": ["Perera", "AI Lab"], "triples": [["Perera", "manages", "AI Lab"]]},
+    {"text": "Gemini Live is part of Google AI Studio.", "entities": ["Gemini Live", "Google AI Studio"], "triples": [["Gemini Live", "part_of", "Google AI Studio"]]},
+    {"text": "Sarah reports to John Smith.", "entities": ["Sarah", "John Smith"], "triples": [["Sarah", "reports_to", "John Smith"]]},
+    {"text": "Electron contains Chromium and Node.", "entities": ["Electron", "Chromium", "Node"], "triples": [["Electron", "contains", "Chromium"]]},
+    {"text": "The RAG Engine stores chunks in SQLite.", "entities": ["RAG Engine", "SQLite"], "triples": [["RAG Engine", "stores", "SQLite"]]},
+    {"text": "Yesterday Kamal met Nimal at the Galle Face Hotel.", "entities": ["Kamal", "Nimal", "Galle Face Hotel"], "triples": []},
+    {"text": "Python is a programming language and NetworkX is written in Python.", "entities": ["Python", "NetworkX"], "triples": [["NetworkX", "created_by", "Python"]]},
+    {"text": "Microsoft owns GitHub.", "entities": ["Microsoft", "GitHub"], "triples": [["Microsoft", "owns", "GitHub"]]},
+    {"text": "The meeting with the Finance Team is on Friday.", "entities": ["Finance Team", "Friday"], "triples": []},
+    {"text": "Kandy is in the Central Province.", "entities": ["Kandy", "Central Province"], "triples": [["Kandy", "located_in", "Central Province"]]}
+  ]
+}

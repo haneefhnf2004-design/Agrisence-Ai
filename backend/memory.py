@@ -8,10 +8,16 @@ import sqlite3
 import time
 
 try:
-    from knowledge_graph import KnowledgeGraph as _KG
-    _kg_instance = _KG()
+    from knowledge_graph import get_graph as _get_graph
 except Exception:
-    _kg_instance = None
+    _get_graph = None
+
+
+def _kg():
+    try:
+        return _get_graph() if _get_graph else None
+    except Exception:
+        return None
 
 # Try to load sentence-transformers for semantic embeddings.
 try:
@@ -42,7 +48,11 @@ class MemoryEngine:
         # Load embedding model if sentence-transformers is available.
         if _has_embeddings:
             try:
-                self._model = _SentenceTransformer('all-MiniLM-L6-v2')
+                # Use the cached copy first so startup doesn't stall on network retries.
+                try:
+                    self._model = _SentenceTransformer('all-MiniLM-L6-v2', local_files_only=True)
+                except Exception:
+                    self._model = _SentenceTransformer('all-MiniLM-L6-v2')
                 self._has_embeddings = True
                 print("[MEMORY] Sentence-transformers loaded — semantic search enabled.")
             except Exception as e:
@@ -106,11 +116,12 @@ class MemoryEngine:
                     (content, category, tags_json, embedding_json, now, now)
                 )
                 conn.commit()
-                if _kg_instance:
-                    try:
-                        _kg_instance.extract_and_add(content, 'memory')
-                    except Exception:
-                        pass
+                g = _kg()
+                if g:
+                    try:  # the graph keeps a reference (memory:<id>), not a second copy of the memory
+                        g.extract_and_add(content, f'memory:{cur.lastrowid}')
+                    except Exception as e:
+                        print(f"[MEMORY] knowledge graph update failed: {e}")
                 return {'id': cur.lastrowid, 'content': content, 'category': category, 'tags': tags}
         except Exception as e:
             print(f"[MEMORY] save_memory error: {e}")
@@ -229,6 +240,9 @@ class MemoryEngine:
             with sqlite3.connect(self.db_path) as conn:
                 cur = conn.execute("DELETE FROM memories WHERE id=?", (memory_id,))
                 conn.commit()
+            g = _kg()
+            if g and cur.rowcount:
+                g.remove_source(f'memory:{memory_id}')
             return cur.rowcount > 0
         except Exception as e:
             print(f"[MEMORY] delete_memory error: {e}")
@@ -240,6 +254,9 @@ class MemoryEngine:
             with sqlite3.connect(self.db_path) as conn:
                 cur = conn.execute("DELETE FROM memories")
                 conn.commit()
+            g = _kg()
+            if g:
+                g.remove_source('memory:', prefix=True)
             return cur.rowcount
         except Exception as e:
             print(f"[MEMORY] clear_all_memories error: {e}")

@@ -1,0 +1,218 @@
+{
+  "timestamp": "2026-11-12T01:33:42",
+  "suites": {
+    "retrieval": {
+      "queries": 16,
+      "hit@1": 1.0,
+      "hit@3": 1.0,
+      "mrr": 1.0,
+      "mode": "semantic",
+      "latency": {
+        "median_ms": 41.6,
+        "p95_ms": 61.8,
+        "max_ms": 62.8
+      },
+      "misses": [],
+      "suite_seconds": 66.3,
+      "run_at": "2026-11-12T01:33:42"
+    },
+    "memory": {
+      "queries": 12,
+      "hit@1": 0.917,
+      "hit@3": 1.0,
+      "mrr": 0.958,
+      "mode": "semantic",
+      "latency": {
+        "median_ms": 38.0,
+        "p95_ms": 45.6,
+        "max_ms": 47.9
+      },
+      "misses": [
+        {
+          "query": "when do I have to submit the report",
+          "expected": "m_deadline",
+          "got": [
+            "m_supervisor",
+            "m_deadline",
+            "m_wifi"
+          ]
+        }
+      ],
+      "suite_seconds": 2.59,
+      "run_at": "2026-11-12T01:33:42"
+    },
+    "kg": {
+      "cases": 15,
+      "entities": {
+        "precision": 0.971,
+        "recall": 1.0,
+        "f1": 0.985,
+        "tp": 33,
+        "fp": 1,
+        "fn": 0
+      },
+      "relations": {
+        "precision": 1.0,
+        "recall": 0.769,
+        "f1": 0.87,
+        "tp": 10,
+        "fp": 0,
+        "fn": 3
+      },
+      "errors": [
+        {
+          "text": "The Nexora App was developed by Ahamed.",
+          "entities_extra": [],
+          "entities_missed": [],
+          "triples_extra": [],
+          "triples_missed": [
+            [
+              "Nexora App",
+              "created_by",
+              "Ahamed"
+            ]
+          ]
+        },
+        {
+          "text": "Dr. Perera manages the AI Lab.",
+          "entities_extra": [
+            "Dr"
+          ],
+          "entities_missed": [],
+          "triples_extra": [],
+          "triples_missed": []
+        },
+        {
+          "text": "The RAG Engine stores chunks in SQLite.",
+          "entities_extra": [],
+          "entities_missed": [],
+          "triples_extra": [],
+          "triples_missed": [
+            [
+              "RAG Engine",
+              "stores",
+              "SQLite"
+            ]
+          ]
+        },
+        {
+          "text": "Python is a programming language and NetworkX is written in Python.",
+          "entities_extra": [],
+          "entities_missed": [],
+          "triples_extra": [],
+          "triples_missed": [
+            [
+              "NetworkX",
+              "created_by",
+              "Python"
+            ]
+          ]
+        }
+      ],
+      "suite_seconds": 0.0,
+      "run_at": "2026-11-12T01:33:42"
+    },
+    "missions": {
+      "cases": 9,
+      "repeats": 3,
+      "runs": 27,
+      "task_completion_rate": 1.0,
+      "result_correctness": 1.0,
+      "execution_reliability": 1.0,
+      "error_recovery_rate": 1.0,
+      "failure_containment_rate": 1.0,
+      "latency": {
+        "median_ms": 71.0,
+        "p95_ms": 135.7,
+        "max_ms": 147.4
+      },
+      "per_case": {
+        "simple_chain": {
+          "correct_runs": 3,
+          "expected": "completed",
+          "last_status": "completed",
+          "last_steps": {
+            "now": "done",
+            "tell": "done"
+          }
+        },
+        "file_pipeline": {
+          "correct_runs": 3,
+          "expected": "completed",
+          "last_status": "completed",
+          "last_steps": {
+            "copy": "done",
+            "check": "done",
+            "archive": "done"
+          }
+        },
+        "parallel_reads": {
+          "correct_runs": 3,
+          "expected": "completed",
+          "last_status": "completed",
+          "last_steps": {
+            "time": "done",
+            "list in": "done",
+            "list out": "done",
+            "graph": "done",
+            "sum": "done"
+          }
+        },
+        "flaky_recovered": {
+          "correct_runs": 3,
+          "expected": "completed",
+          "last_status": "completed",
+          "last_steps": {
+            "flaky": "done",
+            "after": "done"
+          }
+        },
+        "flaky_exhausted": {
+          "correct_runs": 3,
+          "expected": "failed",
+          "last_status": "failed",
+          "last_steps": {
+            "flaky": "failed",
+            "dependent": "skipped",
+            "independent": "done"
+          }
+        },
+        "non_retryable": {
+          "correct_runs": 3,
+          "expected": "failed",
+          "last_status": "failed",
+          "last_steps": {
+            "bad copy": "failed",
+            "uses copy": "skipped"
+          }
+        },
+        "verify_catches_wrong": {
+          "correct_runs": 3,
+          "expected": "failed",
+          "last_status": "failed",
+          "last_steps": {
+            "echo": "failed"
+          }
+        },
+        "conflict_protection": {
+          "correct_runs": 3,
+          "expected": "failed",
+          "last_status": "failed",
+          "last_steps": {
+            "overwrite": "failed"
+          }
+        },
+        "sandbox_escape_blocked": {
+          "correct_runs": 3,
+          "expected": "failed",
+          "last_status": "failed",
+          "last_steps": {
+            "escape": "failed"
+          }
+        }
+      },
+      "suite_seconds": 3.31,
+      "run_at": "2026-11-12T01:33:42"
+    }
+  }
+}

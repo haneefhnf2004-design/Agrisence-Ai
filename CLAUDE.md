@@ -50,6 +50,14 @@ Nexora V2 (an Autonomous Personal Assistant; renamed from A.P.A. on 2026-11-10, 
 - Every user-visible name, the system prompt, window titles, status messages, launchers and the root .md docs now say Nexora.
 - Left as they were: file names (`START_APA.bat`, `apa_launch.log`, `APA_*.docx/.pptx`), the `package.json` name `apa-v2` (Electron keeps saved mic/speaker settings under it), internal variable names, the Word/PowerPoint files, and the submitted research records in `research/` and `Research 2.0/`.
 
+## Advanced features (2026-11-12, uncommitted)
+Full write-up: `docs/ADVANCED_FEATURES.md` (architecture, dependency map, migrations, measured results, limitations).
+- `tool_runner.py` is the real executor for missions and automations (the old mission executor was a stub). Sending email is blocked there.
+- `mission_control.engine` and `knowledge_graph.get_graph()` are singletons shared by ada.py, server.py, memory.py, rag_engine.py.
+- Event rules that run tools/missions need the user's APPROVE click (EVENTS tab); the voice model can't approve.
+- New: `app_context.py`, `telemetry.py` (opt-in, `usage_data_collection` setting), `predictor.py`, `digital_twin.py`, `assistant_tools.py` (voice handlers), `backend/evaluation/` (`python -m evaluation.run [--online]`).
+- Tests: `tests/test_advanced_features.py`, `tests/test_server_wiring.py`; 69 pass. Not yet clicked through in the running Electron app.
+
 ## Working preferences
 - The user is casual ("broski"). They want short, plain answers and the smallest change that works.
 - Ask before deleting anything, pushing, or sending email.

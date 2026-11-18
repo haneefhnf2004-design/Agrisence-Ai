@@ -1,0 +1,29 @@
+{
+  "description": "Long-term memory recall benchmark: 10 memories, 12 paraphrased queries with the memory that should be returned first.",
+  "memories": [
+    {"key": "m_birthday", "content": "My sister's birthday is on 14 March.", "category": "personal"},
+    {"key": "m_coffee", "content": "The user prefers black coffee with no sugar.", "category": "preference"},
+    {"key": "m_supervisor", "content": "The project supervisor is Dr. Perera and meetings are on Thursdays.", "category": "fact"},
+    {"key": "m_deadline", "content": "The final report for the assignment is due on 30 November.", "category": "task"},
+    {"key": "m_car", "content": "The car insurance renews in January with Allianz.", "category": "fact"},
+    {"key": "m_gym", "content": "User goes to the gym on Monday, Wednesday and Friday mornings.", "category": "habit"},
+    {"key": "m_allergy", "content": "The user is allergic to peanuts.", "category": "health"},
+    {"key": "m_wifi", "content": "The home router admin page is at 192.168.1.1.", "category": "fact"},
+    {"key": "m_language", "content": "The user wants replies in simple English, short and casual.", "category": "preference"},
+    {"key": "m_laptop", "content": "The laptop is a Lenovo with 16 GB RAM running Windows 11.", "category": "fact"}
+  ],
+  "queries": [
+    {"q": "when is my sister's birthday", "key": "m_birthday"},
+    {"q": "how do I like my coffee", "key": "m_coffee"},
+    {"q": "who supervises my project", "key": "m_supervisor"},
+    {"q": "which day do I meet my supervisor", "key": "m_supervisor"},
+    {"q": "when do I have to submit the report", "key": "m_deadline"},
+    {"q": "when is the insurance renewal for my vehicle", "key": "m_car"},
+    {"q": "what days do I work out", "key": "m_gym"},
+    {"q": "any food I must avoid", "key": "m_allergy"},
+    {"q": "what is the router's IP address", "key": "m_wifi"},
+    {"q": "how should you talk to me", "key": "m_language"},
+    {"q": "how much memory does my computer have", "key": "m_laptop"},
+    {"q": "what operating system am I on", "key": "m_laptop"}
+  ]
+}

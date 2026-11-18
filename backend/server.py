@@ -36,6 +36,23 @@ sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins=ALLOWED_ORIGI
 app = FastAPI()
 app_socketio = socketio.ASGIApp(sio, app)
 
+MAIN_LOOP = None  # set at startup; worker threads (events, file watcher, wake word) emit through it
+
+
+def _emit_threadsafe(event, data):
+    """sio.emit from any thread. asyncio.create_task only works on the loop thread."""
+    loop = MAIN_LOOP
+    if loop is None:
+        return
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        asyncio.create_task(sio.emit(event, data))
+    else:
+        asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
+
 import signal
 
 def signal_handler(sig, frame):
@@ -223,10 +240,9 @@ except Exception as _tc_err:
     _TC_AVAILABLE = False
 
 try:
-    from mission_control import MissionEngine
-    mission_engine = MissionEngine()
+    from mission_control import engine as mission_engine   # the same engine the voice assistant uses
     def _on_mission_progress(mission_id, event_type, data):
-        asyncio.create_task(sio.emit('mission_progress', {'mission_id': mission_id, 'event_type': event_type, 'data': data}))
+        _emit_threadsafe('mission_progress', {'mission_id': mission_id, 'event_type': event_type, 'data': data})
     mission_engine.on_progress = _on_mission_progress
     _MISSIONS_AVAILABLE = True
 except Exception as _me_err:
@@ -238,7 +254,7 @@ try:
     from event_engine import EventEngine
     event_engine = EventEngine()
     def _on_event_fired(rule_info):
-        asyncio.create_task(sio.emit('event_fired', rule_info))
+        _emit_threadsafe('event_fired', rule_info)   # called from the scheduler / file-watcher threads
     event_engine.on_event = _on_event_fired
     _EVENTS_AVAILABLE = True
 except Exception as _ee_err:
@@ -247,8 +263,8 @@ except Exception as _ee_err:
     _EVENTS_AVAILABLE = False
 
 try:
-    from knowledge_graph import KnowledgeGraph
-    kg_engine = KnowledgeGraph()
+    from knowledge_graph import get_graph
+    kg_engine = get_graph()   # shared with memory.py and rag_engine.py
     _KG_AVAILABLE = True
 except Exception as _kg_err:
     print(f'[KG] Knowledge graph unavailable: {_kg_err}')
@@ -259,10 +275,7 @@ except Exception as _kg_err:
 def _on_wake_word():
     """Called by wake word listener thread → emit socket event to all clients."""
     print("[WAKE] Wake word detected!")
-    asyncio.run_coroutine_threadsafe(
-        sio.emit('wake_word_detected', {'phrase': 'hey nexora'}),
-        asyncio.get_event_loop()
-    )
+    _emit_threadsafe('wake_word_detected', {'phrase': 'hey nexora'})
 
 
 async def _system_stats_loop():
@@ -313,11 +326,18 @@ async def _perf_history_loop():
 @app.on_event("startup")
 async def startup_event():
     print("[SERVER] Nexora Email Assistant Backend Starting...")
+    global MAIN_LOOP
+    MAIN_LOOP = asyncio.get_running_loop()
+    import tool_runner, telemetry, app_context
+    telemetry.set_enabled(SETTINGS.get("usage_data_collection", False))
+    tool_runner.set_notifier(lambda payload: _emit_threadsafe('nexora_notification', payload))
+    tool_runner._ctx['event_engine'] = event_engine
+    app_context.tracker.start()
     asyncio.create_task(focus_engine.run_forever())
     asyncio.create_task(_system_stats_loop())
     asyncio.create_task(_daily_briefing_loop())
     asyncio.create_task(_perf_history_loop())
-    if event_engine: await asyncio.to_thread(event_engine.start)
+    if event_engine: event_engine.start(MAIN_LOOP)
     if SETTINGS.get("bluey_desktop", True):
         try:
             import bluey_buddy
@@ -801,6 +821,8 @@ async def update_settings(sid, data):
             else:
                 SETTINGS[k] = v
         save_settings()
+        import telemetry
+        telemetry.set_enabled(SETTINGS.get("usage_data_collection", False))
         print("Settings updated.")
         await sio.emit('settings_updated', {'settings': public_settings()})
         if "email_config" in data:
@@ -995,8 +1017,12 @@ async def create_mission(sid, data=None):
         await sio.emit('mission_error', {'error': 'Mission engine unavailable'}, room=sid)
         return
     data = data or {}
-    mission_id = await asyncio.to_thread(mission_engine.create_mission, data.get('title', 'Untitled'), data.get('description', ''), data.get('subtasks', []))
-    asyncio.create_task(mission_engine.execute_mission(mission_id))
+    try:
+        mission_id = await asyncio.to_thread(mission_engine.create_mission, data.get('title', 'Untitled'), data.get('description', ''), data.get('subtasks', []))
+    except ValueError as e:
+        await sio.emit('mission_error', {'error': str(e)}, room=sid)
+        return
+    mission_engine.start(mission_id)
     await sio.emit('mission_created', {'mission_id': mission_id}, room=sid)
 
 @sio.event
@@ -1015,6 +1041,20 @@ async def cancel_mission(sid, data=None):
         await sio.emit('mission_cancelled', {'mission_id': mission_id}, room=sid)
 
 @sio.event
+async def pause_mission(sid, data=None):
+    if not mission_engine: return
+    mission_engine.pause_mission((data or {}).get('mission_id'))
+    await sio.emit('missions_list', {'missions': await asyncio.to_thread(mission_engine.list_missions)}, room=sid)
+
+@sio.event
+async def resume_mission(sid, data=None):
+    if not mission_engine: return
+    mid = (data or {}).get('mission_id')
+    if mid and mission_engine.resume_mission(mid):
+        mission_engine.start(mid)
+    await sio.emit('missions_list', {'missions': await asyncio.to_thread(mission_engine.list_missions)}, room=sid)
+
+@sio.event
 async def get_missions(sid, data=None):
     if not mission_engine:
         await sio.emit('missions_list', {'missions': []}, room=sid)
@@ -1031,12 +1071,40 @@ async def get_mission(sid, data=None):
         await sio.emit('mission_detail', {'mission': m}, room=sid)
 
 
+async def _send_rules(sid=None):
+    rules = await asyncio.to_thread(event_engine.list_rules)
+    history = await asyncio.to_thread(event_engine.get_history)
+    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+    await sio.emit('event_history', {'history': history}, room=sid)
+
 @sio.event
 async def add_event_rule(sid, data=None):
     if not event_engine: return
-    rule_id = await asyncio.to_thread(event_engine.add_rule, data or {})
-    rules = await asyncio.to_thread(event_engine.list_rules)
-    await sio.emit('event_rules_list', {'rules': rules}, room=sid)
+    try:   # a rule the user builds in the EVENTS tab is approved by its author
+        await asyncio.to_thread(event_engine.add_rule, data or {}, True)
+    except ValueError as e:
+        await sio.emit('event_rule_error', {'error': str(e)}, room=sid)
+        return
+    await _send_rules(sid)
+
+@sio.event
+async def approve_event_rule(sid, data=None):
+    if not event_engine: return
+    await asyncio.to_thread(event_engine.approve_rule, (data or {}).get('rule_id'))
+    await _send_rules(sid)
+
+@sio.event
+async def revoke_event_rule(sid, data=None):
+    if not event_engine: return
+    await asyncio.to_thread(event_engine.revoke_rule, (data or {}).get('rule_id'))
+    await _send_rules(sid)
+
+@sio.event
+async def dry_run_event_rule(sid, data=None):
+    if not event_engine: return
+    import digital_twin
+    res = await digital_twin.dry_run_rule(event_engine, (data or {}).get('rule_id'))
+    await sio.emit('simulation_result', res, room=sid)
 
 @sio.event
 async def remove_event_rule(sid, data=None):
@@ -1072,6 +1140,7 @@ async def fire_event_rule(sid, data=None):
     rule_id = (data or {}).get('rule_id')
     if rule_id:
         await asyncio.to_thread(event_engine.fire_rule, rule_id)
+        await _send_rules(sid)
 
 
 @sio.event
@@ -1110,6 +1179,75 @@ async def search_kg(sid, data=None):
     query = (data or {}).get('query', '')
     results = await asyncio.to_thread(kg_engine.search_graph, query)
     await sio.emit('kg_search_results', {'results': results}, room=sid)
+
+@sio.event
+async def kg_relations(sid, data=None):
+    if not kg_engine: return
+    name = (data or {}).get('name', '')
+    await sio.emit('kg_relations', {'name': name, 'facts': await asyncio.to_thread(kg_engine.relations, name)}, room=sid)
+
+@sio.event
+async def kg_path(sid, data=None):
+    if not kg_engine: return
+    data = data or {}
+    await sio.emit('kg_path', await asyncio.to_thread(kg_engine.find_path, data.get('a', ''), data.get('b', '')), room=sid)
+
+
+# ---------------------------------------------- digital twin / predictor / evaluation ----
+@sio.event
+async def simulate(sid, data=None):
+    """Same contract as the voice `simulate` tool: target = file_operation | mission | event_rule."""
+    data = dict(data or {})
+    import digital_twin
+    target = data.get('target')
+    if target == 'file_operation':
+        res = await asyncio.to_thread(digital_twin.preview_file_operation, data.get('op'), data.get('src'),
+                                      data.get('dst'), data.get('pattern'), bool(data.get('overwrite')))
+    elif target == 'mission':
+        res = await digital_twin.simulate_mission(data.get('subtasks') or [], data.get('fail_steps') or None)
+    elif target == 'event_rule' and event_engine:
+        res = await digital_twin.dry_run_rule(event_engine, data.get('rule_id'))
+    else:
+        res = {'error': 'target must be file_operation, mission or event_rule'}
+    await sio.emit('simulation_result', res, room=sid)
+
+@sio.event
+async def get_recommendations(sid, data=None):
+    import predictor
+    res = await asyncio.to_thread(predictor.recommendations)
+    import telemetry
+    calls = await asyncio.to_thread(telemetry.calls, 0)
+    res['backtest'] = await asyncio.to_thread(predictor.backtest, [c for c in calls if c['source'] in predictor.USER_SOURCES and c['ok']])
+    await sio.emit('recommendations', res, room=sid)
+
+_EVAL_RUNNING = {'on': False}
+
+@sio.event
+async def run_evaluation(sid, data=None):
+    """Offline suites only from the UI (no API spend). The online tool-selection suite is CLI-only."""
+    if _EVAL_RUNNING['on']:
+        await sio.emit('eval_results', {'running': True}, room=sid)
+        return
+    _EVAL_RUNNING['on'] = True
+    await sio.emit('eval_results', {'running': True}, room=sid)
+    try:
+        from evaluation import run as ev
+        res = await asyncio.to_thread(ev.run, None, False, 3)
+        await sio.emit('eval_results', {'running': False, 'results': res, 'summary': ev.summary(res)}, room=sid)
+    finally:
+        _EVAL_RUNNING['on'] = False
+
+@sio.event
+async def get_eval_results(sid, data=None):
+    from evaluation import run as ev
+    res = ev.latest()
+    await sio.emit('eval_results', {'running': _EVAL_RUNNING['on'], 'results': res, 'summary': ev.summary(res) if res else ''}, room=sid)
+
+@sio.event
+async def get_app_context(sid, data=None):
+    import app_context
+    await sio.emit('app_context', {'active': await asyncio.to_thread(app_context.active_window),
+                                   'recent': app_context.tracker.recent(10)}, room=sid)
 
 
 try:

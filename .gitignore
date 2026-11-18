@@ -52,3 +52,13 @@ backend/places_cache.json
 backend/*.db
 backend/knowledge_graph.json
 backend/focus_history.json
+
+# Nexora runtime data (local only)
+backend/telemetry.db
+backend/evaluation/results/2*.json
+
+# local junk / side projects
+apa_launch.log
+/Pin on overlay v*
+.claude/
+icst-lms-redesign/
