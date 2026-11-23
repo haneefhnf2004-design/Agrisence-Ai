@@ -24,6 +24,7 @@ import fnmatch
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+import security
 import telemetry
 
 
@@ -95,9 +96,11 @@ async def run_tool(name: str, args: dict = None, source: str = "mission") -> dic
         else:
             out = await s.fn(args)
         telemetry.record(name, source, True, (time.perf_counter() - t0) * 1000)
+        security.audit(name, source, args, True)
         return {"ok": True, "output": out}
     except Exception as e:
         telemetry.record(name, source, False, (time.perf_counter() - t0) * 1000, f"{type(e).__name__}: {e}")
+        security.audit(name, source, args, False, f"{type(e).__name__}: {e}")
         raise
 
 

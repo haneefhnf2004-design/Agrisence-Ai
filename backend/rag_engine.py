@@ -100,6 +100,17 @@ class RAGEngine:
             except Exception as e:
                 return None, f"Text decode error: {e}"
 
+        # Excel, PowerPoint, CSV and code files: real extraction instead of decoding the raw bytes.
+        try:
+            import doc_intel
+            if ft in doc_intel.SUPPORTED:
+                text, _meta = doc_intel.extract_bytes(content_bytes, ft)
+                return text, None
+        except ImportError as e:
+            return None, f"Missing library for .{ft}: {e}"
+        except Exception as e:
+            return None, f"{ft.upper()} parse error: {e}"
+
         # Fallback: try UTF-8 decode
         try:
             return content_bytes.decode('utf-8', errors='replace'), None

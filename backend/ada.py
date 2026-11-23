@@ -163,6 +163,17 @@ NO_CONFIRM_TOOLS = ("get_datetime", "get_system_stats", "sri_lanka_weather", "sr
 
 pya = pyaudio.PyAudio()
 
+
+def _ensure_portaudio():
+    """The wake-word listener (speech_recognition) shuts PortAudio down for the whole process when it
+    stops, so re-initialise it before the voice loop opens a stream."""
+    global pya
+    try:
+        pya.get_device_count()
+    except OSError:
+        print("[ADA] PortAudio was shut down; re-initialising.")
+        pya = pyaudio.PyAudio()
+
 from email_agent import EmailAgent
 
 
@@ -294,7 +305,17 @@ class AudioLoop:
             await asyncio.sleep(0.05)
 
     async def listen_audio(self):
-        mic_info = pya.get_default_input_device_info()
+        _ensure_portaudio()
+        # No default mic (unplugged/disabled) must not kill the whole Gemini session.
+        try:
+            mic_info = pya.get_default_input_device_info()
+        except OSError as e:
+            print(f"[ADA] No default microphone: {e}")
+            mic_info = {}
+            if not self.input_device_name and self.input_device_index is None:
+                if self.on_error:
+                    self.on_error("No microphone found. Plug in or enable a mic in Windows sound settings, then press Voice off/on. Chat still works.")
+                return
 
         resolved_input_device_index = None
 
@@ -812,6 +833,7 @@ class AudioLoop:
         import queue
         import threading
 
+        _ensure_portaudio()
         try:
             stream = await asyncio.to_thread(
                 pya.open,
@@ -1199,6 +1221,11 @@ class AudioLoop:
 
             except Exception as e:
                 print(f"[ADA DEBUG] [ERR] Connection Error: {e}")
+                for sub in getattr(e, "exceptions", ()):  # unwrap TaskGroup errors
+                    print(f"[ADA DEBUG] [ERR]   cause: {type(sub).__name__}: {sub}")
+                    import traceback
+                    tb = traceback.extract_tb(sub.__traceback__)[-3:]
+                    print("[ADA DEBUG] [ERR]   at: " + " <- ".join(f"{f.name}:{f.lineno}" for f in reversed(tb)))
                 if self.stop_event.is_set():
                     break
                 print(f"[ADA DEBUG] [RETRY] Reconnecting in {retry_delay} seconds...")

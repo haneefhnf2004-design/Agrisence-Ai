@@ -96,18 +96,26 @@ class MemoryEngine:
     def save_memory(self, content, category='fact', tags=None):
         """Store a memory and return a dict with its id."""
         try:
+            import security
+            if security.contains_secret(content):
+                return {'id': None, 'error': "That looks like a password, key or token. Secrets are never stored as memories."}
             if tags is None:
                 tags = []
             tags_json = json.dumps(tags)
             now = time.time()
 
             embedding_json = None
+            vec = None
             if self._has_embeddings and self._model is not None:
                 try:
                     vec = self._model.encode(content).tolist()
                     embedding_json = json.dumps(vec)
                 except Exception as e:
                     print(f"[MEMORY] Embedding generation failed: {e}")
+
+            dup = self._find_duplicate(content, vec)
+            if dup is not None:
+                return {'id': dup, 'content': content, 'category': category, 'tags': tags, 'duplicate': True}
 
             with sqlite3.connect(self.db_path) as conn:
                 cur = conn.execute(
@@ -247,6 +255,54 @@ class MemoryEngine:
         except Exception as e:
             print(f"[MEMORY] delete_memory error: {e}")
             return False
+
+    DUPLICATE_SIMILARITY = 0.93
+
+    def _find_duplicate(self, content, vec=None):
+        """Id of an existing memory with the same text (case/space-insensitive) or a near-identical embedding."""
+        norm = " ".join(content.lower().split())
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute("SELECT id, content, embedding_json FROM memories").fetchall()
+        for mid, text, emb in rows:
+            if " ".join((text or "").lower().split()) == norm:
+                return mid
+        if vec is not None:
+            for mid, _text, emb in rows:
+                if emb:
+                    try:
+                        if _cosine_sim(vec, json.loads(emb)) >= self.DUPLICATE_SIMILARITY:
+                            return mid
+                    except Exception:
+                        continue
+        return None
+
+    def export_memories(self, path):
+        """Write every memory (without embeddings) to a JSON file. Returns the count."""
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute("SELECT id, content, category, tags, created_at FROM memories ORDER BY id").fetchall()
+        data = [{'id': r[0], 'content': r[1], 'category': r[2], 'tags': json.loads(r[3] or '[]'), 'created_at': r[4]}
+                for r in rows]
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'format': 'nexora-memories-v1', 'memories': data}, f, ensure_ascii=False, indent=1)
+        return len(data)
+
+    def import_memories(self, path):
+        """Add memories from an export file. Skips duplicates and secrets. Returns counts."""
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+        items = data.get('memories', []) if isinstance(data, dict) else data
+        added = skipped = 0
+        for m in items[:5000]:
+            if not isinstance(m, dict) or not isinstance(m.get('content'), str) or not m['content'].strip():
+                skipped += 1
+                continue
+            tags = m.get('tags') if isinstance(m.get('tags'), list) else []
+            res = self.save_memory(m['content'][:4000], str(m.get('category') or 'fact')[:40], [str(t)[:40] for t in tags][:20])
+            if res.get('id') and not res.get('duplicate'):
+                added += 1
+            else:
+                skipped += 1
+        return {'added': added, 'skipped': skipped}
 
     def clear_all_memories(self):
         """Delete all memories. Returns the count deleted."""

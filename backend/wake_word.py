@@ -38,10 +38,13 @@ class WakeWordListener:
         self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="WakeWordListener")
         self._thread.start()
 
-    def stop(self):
-        """Signal the background thread to stop."""
+    def stop(self, wait=False):
+        """Signal the background thread to stop. wait=True blocks (max ~5s) until it has released the mic,
+        so PortAudio isn't shut down on this thread while the voice loop opens it on another."""
         self._stop_event.set()
-        self._thread = None  # allow GC; daemon thread will terminate on its own
+        thread, self._thread = self._thread, None
+        if wait and thread is not None and thread.is_alive():
+            thread.join(timeout=5)
 
     # ------------------------------------------------------------------ #
     def _listen_loop(self):

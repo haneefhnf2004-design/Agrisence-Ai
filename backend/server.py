@@ -451,6 +451,11 @@ async def start_audio(sid, data=None):
         asyncio.create_task(sio.emit('widget_update', data))
         _bluey_forward_widget(data)
 
+    # Release the wake-word mic before the voice loop opens its own (PortAudio isn't thread-safe).
+    if wake_listener and wake_listener.running:
+        await asyncio.to_thread(wake_listener.stop, True)
+        print("[WAKE] Wake word listener paused (voice active).")
+
     try:
         print(f"Initializing AudioLoop with device_index={device_index}")
         audio_loop = ada.AudioLoop(
@@ -487,9 +492,6 @@ async def start_audio(sid, data=None):
         loop_task.add_done_callback(handle_loop_exit)
 
         print("Emitting 'Nexora Started'")
-        if wake_listener and wake_listener.running:
-            wake_listener.stop()
-            print("[WAKE] Wake word listener paused (voice active).")
         await sio.emit('status', {'msg': 'Nexora Started'})
 
         email_config = SETTINGS.get("email_config", {})
